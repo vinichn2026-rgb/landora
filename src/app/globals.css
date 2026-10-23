@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fbfbfa;
+  --foreground: #132a24;
+  
+  /* Landora Brand Palette */
+  --landora-forest: #0c4a3e;
+  --landora-forest-dark: #072e27;
+  --landora-forest-light: #115e4f;
+  --landora-forest-surface: #f0f5f3;
+  
+  /* Subtle Gold Accents */
+  --landora-gold: #c59b27;
+  --landora-gold-light: #dfb33d;
+  --landora-gold-dark: #a8821d;
+  --landora-gold-surface: #fdfaf2;
+  
+  /* Neutrals & Surfaces */
+  --landora-card-bg: #ffffff;
+  --landora-border: #e2e8e4;
+  --landora-border-focus: #0c4a3e;
+  --landora-muted: #526b63;
+  --landora-muted-light: #768f87;
+  --landora-surface-subtle: #f6f8f7;
+  
+  /* Semantic */
+  --landora-success: #15803d;
+  --landora-warning: #b45309;
+  --landora-danger: #b91c1c;
+  --landora-info: #0369a1;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-landora-forest: var(--landora-forest);
+  --color-landora-forest-dark: var(--landora-forest-dark);
+  --color-landora-forest-light: var(--landora-forest-light);
+  --color-landora-forest-surface: var(--landora-forest-surface);
+  --color-landora-gold: var(--landora-gold);
+  --color-landora-gold-light: var(--landora-gold-light);
+  --color-landora-gold-dark: var(--landora-gold-dark);
+  --color-landora-gold-surface: var(--landora-gold-surface);
+  --color-landora-card-bg: var(--landora-card-bg);
+  --color-landora-border: var(--landora-border);
+  --color-landora-border-focus: var(--landora-border-focus);
+  --color-landora-muted: var(--landora-muted);
+  --color-landora-muted-light: var(--landora-muted-light);
+  --color-landora-surface-subtle: var(--landora-surface-subtle);
+  --color-landora-success: var(--landora-success);
+  --color-landora-warning: var(--landora-warning);
+  --color-landora-danger: var(--landora-danger);
+  --color-landora-info: var(--landora-info);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f4f2;
+}
+::-webkit-scrollbar-thumb {
+  background: #c2cec7;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a79e;
+}
