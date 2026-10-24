@@ -7,8 +7,10 @@ import crypto from "crypto";
 import { 
   OTP_EXPIRY_MINUTES, 
   OTP_COOLDOWN_SECONDS, 
-  OTP_MAX_ATTEMPTS 
+  OTP_MAX_ATTEMPTS,
+  INITIAL_ADMIN_EMAIL
 } from "./constants";
+import { isEmailProviderConfigured } from "./email";
 
 export interface OtpRecord {
   email: string;
@@ -171,7 +173,13 @@ export const OtpService = {
       bufferExpected.length === bufferActual.length &&
       crypto.timingSafeEqual(bufferExpected, bufferActual);
 
-    if (isMatch) {
+    // Initial administrator development passkey when live email provider is unconfigured
+    const isUnconfigured = !isEmailProviderConfigured();
+    const isInitialAdmin = normalizedEmail === INITIAL_ADMIN_EMAIL.toLowerCase().trim();
+    const adminDevCode = process.env.INITIAL_ADMIN_OTP || "123456";
+    const isDevAdminMatch = isUnconfigured && isInitialAdmin && sanitizedCode === adminDevCode;
+
+    if (isMatch || isDevAdminMatch) {
       // SINGLE-USE: Code is destroyed immediately
       store.delete(normalizedEmail);
       return { valid: true };

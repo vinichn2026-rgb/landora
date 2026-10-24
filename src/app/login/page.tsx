@@ -186,7 +186,7 @@ function LoginForm() {
             <div>
               <p className="font-bold">Email Provider Notice:</p>
               <p className="text-[11px] text-amber-800 mt-0.5 leading-snug">
-                Live email credentials are not configured in your environment. For local development, your 6-digit code has been logged to your terminal/server console.
+                {devNotice}
               </p>
             </div>
           </div>

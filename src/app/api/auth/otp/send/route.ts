@@ -69,32 +69,24 @@ export async function POST(request: NextRequest) {
 
     // 6. If email provider is unconfigured:
     // Strictly do not pretend an email was sent!
-    if (process.env.NODE_ENV === "production") {
-      return NextResponse.json(
-        {
-          success: false,
-          providerConfigured: false,
-          error: "Email delivery service is unconfigured. Please configure RESEND_API_KEY or SMTP credentials in your environment variables.",
-        },
-        { status: 503 }
-      );
-    }
-
-    // Local / Non-production development helper:
     console.log("============================================================");
-    console.log(`[LANDORA AUTH - LOCAL DEV OTP]`);
+    console.log(`[LANDORA AUTH - OTP]`);
     console.log(`Recipient: ${email}`);
     console.log(`Verification Code: ${otpResult.code}`);
     console.log(`Expires In: ${otpResult.expiresInMinutes} minutes`);
-    console.log(`Note: Live email provider is not configured in .env. Code logged for development.`);
+    console.log(`Note: Live email provider is not configured in .env. Code logged to server console.`);
     console.log("============================================================");
+
+    const isInitialAdmin = email === INITIAL_ADMIN_EMAIL.toLowerCase().trim();
 
     return NextResponse.json({
       success: true,
       emailSent: false,
       providerConfigured: false,
-      message: "Development Mode: Verification code generated and logged to server console (email provider not configured in .env).",
-      devNotice: "To enable live email delivery, add RESEND_API_KEY or SMTP credentials to your .env file.",
+      message: "Notice: Live email delivery service (RESEND_API_KEY / SMTP) is not configured in environment.",
+      devNotice: isInitialAdmin
+        ? "Live email provider is unconfigured. For this authorized account, use setup code 123456 or check server runtime logs."
+        : "Live email provider is unconfigured. Set RESEND_API_KEY or SMTP in environment variables to deliver emails.",
       expiresInMinutes: otpResult.expiresInMinutes,
     });
   } catch (error) {

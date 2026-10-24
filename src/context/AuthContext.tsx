@@ -127,9 +127,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const data = await res.json();
+
+      const contentType = res.headers.get("content-type") || "";
+      let data: any;
+
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        return {
+          success: false,
+          error: text || `Server error (${res.status}). Please try again.`,
+        };
+      }
+
       return data;
-    } catch {
+    } catch (err: any) {
+      console.error("[AUTH] sendOtp error:", err);
       return { 
         success: false, 
         error: "Network connection error while requesting verification code. Please check your internet connection." 
@@ -144,7 +158,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code }),
       });
-      const data = await res.json();
+
+      const contentType = res.headers.get("content-type") || "";
+      let data: any;
+
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        return {
+          success: false,
+          error: text || `Server error (${res.status}). Please try again.`,
+        };
+      }
 
       if (data.success && data.user) {
         setUser(data.user);
@@ -170,7 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           error: data.error || "Verification failed. Please check your code." 
         };
       }
-    } catch {
+    } catch (err: any) {
+      console.error("[AUTH] verifyOtp error:", err);
       return { 
         success: false, 
         error: "Network connection error while verifying code." 
