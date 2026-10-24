@@ -171,7 +171,24 @@ function LoginForm() {
         {error && (
           <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-medium leading-relaxed flex items-start gap-2 animate-in fade-in">
             <span className="font-bold text-rose-600 shrink-0">✕</span>
-            <span>{error}</span>
+            <div className="flex-1">
+              <span>{error}</span>
+              {cooldown > 0 && otpStep === "email" && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpStep("code");
+                      setError("");
+                    }}
+                    className="text-xs font-bold text-[#0c4a3e] underline cursor-pointer hover:text-emerald-950 inline-flex items-center gap-1"
+                  >
+                    <span>Already received the code in your email? Click to enter it</span>
+                    <span>&rarr;</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
