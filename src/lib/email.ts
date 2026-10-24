@@ -20,10 +20,15 @@ export interface EmailDispatchResult {
 }
 
 export const isEmailProviderConfigured = (): boolean => {
-  return Boolean(
-    process.env.RESEND_API_KEY ||
-    (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
+  const rawResend = process.env.RESEND_API_KEY?.trim().replace(/^["']|["']$/g, "");
+  const hasResend = Boolean(rawResend && rawResend.startsWith("re_") && rawResend.length > 10 && !rawResend.includes("your_api_key"));
+  const hasSmtp = Boolean(
+    process.env.SMTP_HOST && 
+    process.env.SMTP_USER && 
+    process.env.SMTP_PASS &&
+    !process.env.SMTP_PASS.includes("your-16-char")
   );
+  return hasResend || hasSmtp;
 };
 
 // Base HTML Wrapper with Landora Brand Design System
@@ -123,16 +128,18 @@ async function dispatchEmail(params: {
   }
 
   // If Resend API Key is provided
-  if (process.env.RESEND_API_KEY) {
+  const rawResendKey = process.env.RESEND_API_KEY?.trim().replace(/^["']|["']$/g, "");
+  if (rawResendKey) {
     try {
+      const fromEmail = (process.env.EMAIL_FROM || "Landora <onboarding@resend.dev>").trim().replace(/^["']|["']$/g, "");
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+          "Authorization": `Bearer ${rawResendKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || "Landora <notifications@landora.in>",
+          from: fromEmail,
           to: [params.to],
           subject: params.subject,
           html: params.html,
@@ -151,13 +158,21 @@ async function dispatchEmail(params: {
         };
       } else {
         const err = await response.text();
+        let cleanMsg = err;
+        try {
+          const parsed = JSON.parse(err);
+          if (parsed.message) {
+            cleanMsg = parsed.message;
+          }
+        } catch {}
+
         return {
           success: false,
           providerConfigured: true,
           event: params.event,
           recipient: params.to,
           subject: params.subject,
-          error: `Resend error: ${err}`,
+          error: `Resend error: ${cleanMsg}`,
         };
       }
     } catch (err: any) {
