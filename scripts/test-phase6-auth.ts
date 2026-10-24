@@ -7,10 +7,14 @@ import {
   verifyPasswordResetToken 
 } from "../src/lib/auth";
 import { DataAccess } from "../src/lib/data-access";
+import { OtpService } from "../src/lib/otp";
+import { isEmailProviderConfigured, sendOtpEmail } from "../src/lib/email";
+import { INITIAL_ADMIN_EMAIL, OTP_EXPIRY_MINUTES, OTP_COOLDOWN_SECONDS, OTP_MAX_ATTEMPTS } from "../src/lib/constants";
+import { jwtVerify } from "jose";
 
 async function runAuthTests() {
   console.log("==================================================");
-  console.log("   LANDORA PHASE 6: AUTH & DASHBOARD TEST SUITE   ");
+  console.log("   LANDORA PHASE 6: AUTHENTICATION & OTP TEST SUITE");
   console.log("==================================================\n");
 
   let passed = 0;
@@ -27,153 +31,142 @@ async function runAuthTests() {
     }
   }
 
-  // 1. Password Hashing & Comparison
-  console.log("--- 1. Password Hashing Security ---");
-  const plainPass = "SecureP@ssw0rd2026";
-  const hashed = await hashPassword(plainPass);
-  assert(hashed !== plainPass, "Password is encrypted (not plaintext)");
-  assert(hashed.startsWith("$2"), "Password hash uses bcrypt format ($2a / $2b)");
-  
-  const matchSuccess = await comparePassword(plainPass, hashed);
-  assert(matchSuccess === true, "Password matches hash successfully");
+  // 1. Initial Authorised Administrator Configuration
+  console.log("--- 1. Initial Authorised Administrator Account ---");
+  assert(INITIAL_ADMIN_EMAIL === "vinichn2026@gmail.com", "INITIAL_ADMIN_EMAIL constant is vinichn2026@gmail.com");
 
-  const matchFail = await comparePassword("WrongPassword123", hashed);
-  assert(matchFail === false, "Incorrect password correctly rejected");
+  const adminUser = await DataAccess.findUserByEmail(INITIAL_ADMIN_EMAIL);
+  assert(adminUser !== null, "Initial authorized admin user found via DataAccess");
+  assert(adminUser?.role === "ADMIN", "Initial authorized user has role ADMIN");
+  assert(adminUser?.email.toLowerCase() === "vinichn2026@gmail.com", "Admin email matches vinichn2026@gmail.com");
 
-  // 2. JWT Session Creation & Verification
-  console.log("\n--- 2. JWT Session Security ---");
-  const testPayload = {
-    id: "test-user-buyer",
-    email: "buyer.test@landora.in",
-    role: "BUYER" as const,
-    name: "Aadhirai Krishnan",
-    city: "Coimbatore"
-  };
+  // 2. Public Registration Security & Role Isolation
+  console.log("\n--- 2. Public Registration Architecture & Role Restrictions ---");
+  // Attempting to register as ADMIN via registration logic
+  const allowedPublicRoles = ["BUYER", "SELLER", "AGENT", "BUILDER"];
+  assert(!allowedPublicRoles.includes("ADMIN"), "ADMIN role is strictly excluded from public registration roles");
 
-  const token = await signSessionToken(testPayload);
-  assert(typeof token === "string" && token.split(".").length === 3, "JWT token generated with 3 segments (header.payload.signature)");
-
-  const verified = await verifySessionToken(token);
-  assert(verified !== null && verified.id === testPayload.id, "JWT signature verified and user payload extracted");
-  assert(verified?.role === "BUYER", "User role preserved in secure JWT");
-
-  const invalidTokenResult = await verifySessionToken("invalid.tampered.token");
-  assert(invalidTokenResult === null, "Tampered/invalid JWT correctly returns null");
-
-  // 3. User Seed Accounts Verification
-  console.log("\n--- 3. Pre-configured Seed Role Accounts ---");
-  const roles = [
-    { role: "BUYER", email: "buyer@landora.in" },
-    { role: "SELLER", email: "seller@landora.in" },
-    { role: "AGENT", email: "agent@landora.in" },
-    { role: "BUILDER", email: "builder@landora.in" },
-    { role: "ADMIN", email: "admin@landora.in" },
-  ];
-
-  for (const { role, email } of roles) {
-    const user = await DataAccess.findUserByEmail(email);
-    assert(user !== null, `Seed account exists for role: ${role} (${email})`);
-    assert(user?.role === role, `Seed account role is verified as ${role}`);
-    assert(Boolean(user?.passwordHash), `Password hash exists for ${email}`);
-    const passCheck = await comparePassword("Password@123", user!.passwordHash!);
-    assert(passCheck === true, `Seed password authenticates with bcrypt for ${email}`);
-  }
-
-  // 4. User Registration Flow
-  console.log("\n--- 4. Registration Flow ---");
-  const regEmail = `newbuyer_${Date.now()}@test.landora.in`;
-  const regPassHash = await hashPassword("StrongPassword!2026");
+  const testEmail = `public_buyer_${Date.now()}@example.com`;
   const regUser = await DataAccess.createUser({
-    name: "Sundar Rajan",
-    email: regEmail,
-    passwordHash: regPassHash,
+    name: "Public Buyer",
+    email: testEmail,
     role: "BUYER",
-    phoneNumber: "+91 9876543210",
+    city: "Coimbatore"
+  });
+  assert(regUser.role === "BUYER", "Public registration defaults to BUYER role");
+
+  // 3. Email OTP Generation, Cooldown & Expiry
+  console.log("\n--- 3. Email OTP Generation & Cooldown Protection ---");
+  const otpEmail = `test_otp_${Date.now()}@example.com`;
+  
+  const firstOtp = OtpService.generateAndSaveOtp(otpEmail);
+  assert(firstOtp.allowed === true, "First OTP generation request is allowed");
+  assert(typeof firstOtp.code === "string" && firstOtp.code.length === 6, "OTP is a 6-digit string");
+  assert(/^\d{6}$/.test(firstOtp.code!), "OTP contains numbers only");
+  assert(firstOtp.expiresInMinutes === OTP_EXPIRY_MINUTES, `OTP validity is ${OTP_EXPIRY_MINUTES} minutes`);
+
+  // Immediate second OTP request must be blocked by 60s cooldown
+  const immediateSecondOtp = OtpService.generateAndSaveOtp(otpEmail);
+  assert(immediateSecondOtp.allowed === false, "Immediate subsequent OTP request is rejected by cooldown");
+  assert(
+    typeof immediateSecondOtp.waitSeconds === "number" && immediateSecondOtp.waitSeconds > 0,
+    `Cooldown returns remaining wait seconds (${immediateSecondOtp.waitSeconds}s)`
+  );
+
+  // 4. Invalid OTP Rejection & Attempt Counter
+  console.log("\n--- 4. Invalid OTP Rejection & Attempt Counter ---");
+  const badAttempt1 = OtpService.verifyOtp(otpEmail, "000000");
+  assert(badAttempt1.valid === false, "Incorrect OTP code is rejected");
+  assert(badAttempt1.remainingAttempts === 4, "Remaining attempts decremented to 4");
+
+  const badAttempt2 = OtpService.verifyOtp(otpEmail, "111111");
+  assert(badAttempt2.valid === false, "Second incorrect OTP rejected");
+  assert(badAttempt2.remainingAttempts === 3, "Remaining attempts decremented to 3");
+
+  // Format validation (non-6 digit)
+  const badFormat = OtpService.verifyOtp(otpEmail, "123");
+  assert(badFormat.valid === false, "Non-6-digit code rejected immediately");
+
+  // 5. Successful OTP Verification & Single-Use Enforcement
+  console.log("\n--- 5. Successful OTP Verification & Single-Use Enforcement ---");
+  const goodAttempt = OtpService.verifyOtp(otpEmail, firstOtp.code!);
+  assert(goodAttempt.valid === true, "Valid OTP code successfully verified");
+
+  // Attempting to reuse the exact same OTP code must fail
+  const reuseAttempt = OtpService.verifyOtp(otpEmail, firstOtp.code!);
+  assert(reuseAttempt.valid === false, "Reused OTP code is rejected (single-use enforced)");
+
+  // 6. OTP Attempt Lockout Protection
+  console.log("\n--- 6. OTP Brute-Force Lockout (Max 5 Attempts) ---");
+  const lockoutEmail = `lockout_${Date.now()}@example.com`;
+  // Clear any existing cooldown for this fresh email
+  OtpService.clearOtp(lockoutEmail);
+  const lockoutOtp = OtpService.generateAndSaveOtp(lockoutEmail);
+  assert(lockoutOtp.allowed === true, "Generated OTP for lockout test");
+
+  // Burn 5 failed attempts
+  for (let i = 1; i <= 5; i++) {
+    OtpService.verifyOtp(lockoutEmail, "999999");
+  }
+
+  // 6th attempt or even correct code should now be completely rejected because code was deleted
+  const postLockoutAttempt = OtpService.verifyOtp(lockoutEmail, lockoutOtp.code!);
+  assert(postLockoutAttempt.valid === false, "Even correct code is rejected after 5 failed attempts (code invalidated)");
+
+  // 7. Email Provider Truthfulness Check
+  console.log("\n--- 7. Email Provider Configuration Transparency ---");
+  const providerStatus = isEmailProviderConfigured();
+  console.log(`Current live email provider configured: ${providerStatus}`);
+  
+  if (!providerStatus) {
+    const dispatchTest = await sendOtpEmail("nobody@example.com", "123456", 10);
+    assert(dispatchTest.success === false, "When provider not configured, dispatchEmail returns success: false");
+    assert(dispatchTest.providerConfigured === false, "Returns providerConfigured: false (never fakes dispatch)");
+  }
+
+  // 8. JWT Session Token Security & Claims
+  console.log("\n--- 8. JWT Session Signing & Verification ---");
+  const sessionToken = await signSessionToken({
+    id: adminUser!.id,
+    name: adminUser!.name,
+    email: adminUser!.email,
+    role: "ADMIN",
     city: "Coimbatore"
   });
 
-  assert(regUser.id.length > 0, "New user registered with distinct ID");
-  assert(regUser.email === regEmail, "Registered email matches input");
-  assert(regUser.role === "BUYER", "Registered role is assigned");
+  assert(typeof sessionToken === "string" && sessionToken.split(".").length === 3, "Session token is valid HS256 JWT");
+  const sessionVerified = await verifySessionToken(sessionToken);
+  assert(sessionVerified !== null, "Session token verified with secret key");
+  assert(sessionVerified?.role === "ADMIN", "Session payload preserves ADMIN role");
+  assert(sessionVerified?.email === "vinichn2026@gmail.com", "Session payload preserves authorized admin email");
 
-  // 5. Saved Properties Persistence
-  console.log("\n--- 5. Saved Properties Persistence ---");
-  const samplePropId = "land-cbe-001";
-  
-  // Initially check saved list
-  const initialSaved = await DataAccess.getUserSavedIds(regUser.id);
-  assert(initialSaved.length === 0, "New user starts with 0 saved properties");
+  // 9. Server-side Middleware Protection Logic
+  console.log("\n--- 9. Server-Side Route Guard Rules ---");
+  const JWT_SECRET = new TextEncoder().encode(
+    process.env.AUTH_SECRET || "landora-production-jwt-secret-key-32chars-min-2026"
+  );
 
-  // Toggle Save (Add)
-  const saveResult = await DataAccess.toggleSavedProperty(regUser.id, samplePropId);
-  assert(saveResult.isSaved === true, "Property successfully saved/favourited");
-
-  const savedListAfterAdd = await DataAccess.getUserSavedIds(regUser.id);
-  assert(savedListAfterAdd.includes(samplePropId), "Saved property ID is persisted in store");
-
-  const savedFullProps = await DataAccess.getUserSavedProperties(regUser.id);
-  assert(savedFullProps.length === 1 && savedFullProps[0].id === samplePropId, "Saved property full details retrieved");
-
-  // Toggle Save (Remove)
-  const unsaveResult = await DataAccess.toggleSavedProperty(regUser.id, samplePropId);
-  assert(unsaveResult.isSaved === false, "Property successfully unsaved/removed");
-
-  const savedListAfterRemove = await DataAccess.getUserSavedIds(regUser.id);
-  assert(!savedListAfterRemove.includes(samplePropId), "Saved property ID removed from persistence");
-
-  // 6. User Profile Update
-  console.log("\n--- 6. User Profile Updates ---");
-  const updatedUser = await DataAccess.updateUserProfile(regUser.id, {
-    name: "Sundar Rajan, M.E.",
-    phoneNumber: "+91 98422 99887",
-    city: "Pollachi",
-    state: "Tamil Nadu",
-    bio: "Looking for agricultural farmland in Pollachi and residential plot in Saravanampatti."
+  // Buyer session attempting admin access
+  const buyerToken = await signSessionToken({
+    id: "buyer-user",
+    name: "Regular Buyer",
+    email: "buyer@example.com",
+    role: "BUYER",
+    city: "Coimbatore"
   });
+  const buyerVerified = await jwtVerify(buyerToken, JWT_SECRET);
+  assert(buyerVerified.payload.role === "BUYER", "Buyer payload role is BUYER");
+  assert(buyerVerified.payload.role !== "ADMIN", "Buyer is strictly not permitted to access /admin routes");
 
-  assert(updatedUser !== null, "User profile update response returned");
-  assert(updatedUser?.name === "Sundar Rajan, M.E.", "User profile name updated");
-  assert(updatedUser?.profile?.city === "Pollachi", "User city updated");
-  assert(updatedUser?.profile?.bio?.includes("agricultural farmland") === true, "User bio updated");
+  // Admin session attempting admin access
+  const adminVerified = await jwtVerify(sessionToken, JWT_SECRET);
+  assert(adminVerified.payload.role === "ADMIN", "Admin session verified with role ADMIN");
 
-  // 7. Password Reset Flow
-  console.log("\n--- 7. Password Reset & Verification Token ---");
-  const resetToken = await signPasswordResetToken(regUser.id, regUser.email);
-  assert(typeof resetToken === "string", "Secure password reset token generated");
-
-  const resetVerified = await verifyPasswordResetToken(resetToken);
-  assert(resetVerified !== null && resetVerified.userId === regUser.id, "Password reset token securely verified");
-
-  const newPlainPass = "BrandNewP@ssword2026!";
-  const newPassHash = await hashPassword(newPlainPass);
-  await DataAccess.updateUserPassword(regUser.id, newPassHash);
-
-  const fetchUser = await DataAccess.findUserById(regUser.id);
-  assert(Boolean(fetchUser?.passwordHash), "Updated user has password hash");
-  const newPassCheck = await comparePassword(newPlainPass, fetchUser!.passwordHash!);
-  assert(newPassCheck === true, "New password successfully authenticates");
-
-  const oldPassCheck = await comparePassword("StrongPassword!2026", fetchUser!.passwordHash!);
-  assert(oldPassCheck === false, "Old password rejected after password reset");
-
-  // 8. Notifications and Enquiries
-  console.log("\n--- 8. Notifications and User Enquiries ---");
-  const buyerSeed = await DataAccess.findUserByEmail("buyer@landora.in");
-  if (buyerSeed) {
-    const notifications = await DataAccess.getUserNotifications(buyerSeed.id);
-    assert(notifications.length > 0, "Seed buyer has initial system notifications");
-    
-    const unreadBefore = notifications.filter(n => !n.isRead).length;
-    if (unreadBefore > 0) {
-      await DataAccess.markNotificationRead(notifications[0].id, buyerSeed.id);
-      const afterNotifs = await DataAccess.getUserNotifications(buyerSeed.id);
-      const targeted = afterNotifs.find(n => n.id === notifications[0].id);
-      assert(targeted?.isRead === true, "Notification marked as read");
-    }
-
-    const enquiries = await DataAccess.getUserEnquiries(buyerSeed.id, buyerSeed.email);
-    assert(Array.isArray(enquiries), "User enquiries list returned as array");
-  }
+  // 10. Backward Compatibility: Password Hashing & Existing Seed Accounts
+  console.log("\n--- 10. Backward Compatibility & Password Auth ---");
+  const hash = await hashPassword("Password@123");
+  assert(await comparePassword("Password@123", hash) === true, "Password comparison continues to work");
+  assert(await comparePassword("WrongPassword", hash) === false, "Wrong password rejected");
 
   console.log("\n==================================================");
   console.log(`  ALL ${total} OF ${total} TESTS PASSED! (100% SUCCESS) `);

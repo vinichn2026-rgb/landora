@@ -3,6 +3,12 @@ export const APP_TAGLINE = "Find the Right Property. Build Your Future.";
 export const APP_SUBTITLE = "Discover land, plots, homes and commercial properties across India.";
 export const APP_PRIMARY_CITY = "Coimbatore";
 
+// Initial Authorised Administrator & Auth Settings
+export const INITIAL_ADMIN_EMAIL = process.env.INITIAL_ADMIN_EMAIL || "vinichn2026@gmail.com";
+export const OTP_EXPIRY_MINUTES = 10;
+export const OTP_COOLDOWN_SECONDS = 60;
+export const OTP_MAX_ATTEMPTS = 5;
+
 export const PROPERTY_CATEGORIES = [
   { id: "residential-plot", label: "Residential Plots", slug: "residential-plots", type: "RESIDENTIAL_PLOT", icon: "Compass" },
   { id: "agricultural-land", label: "Agricultural Land", slug: "agricultural-land", type: "AGRICULTURAL_LAND", icon: "Trees" },

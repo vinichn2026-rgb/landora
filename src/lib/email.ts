@@ -7,6 +7,8 @@
  * (e.g. Resend, SendGrid, or SMTP). If unconfigured, clearly returns providerConfigured: false.
  */
 
+import nodemailer from "nodemailer";
+
 export interface EmailDispatchResult {
   success: boolean;
   providerConfigured: boolean;
@@ -170,19 +172,94 @@ async function dispatchEmail(params: {
     }
   }
 
+  // If SMTP credentials are provided
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: process.env.EMAIL_FROM || `"Landora Marketplace" <${process.env.SMTP_USER}>`,
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+      });
+
+      return {
+        success: true,
+        providerConfigured: true,
+        event: params.event,
+        recipient: params.to,
+        subject: params.subject,
+        messageId: info.messageId,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        providerConfigured: true,
+        event: params.event,
+        recipient: params.to,
+        subject: params.subject,
+        error: err.message || "SMTP transmission failed",
+      };
+    }
+  }
+
   return {
     success: false,
     providerConfigured: false,
     event: params.event,
     recipient: params.to,
     subject: params.subject,
-    error: "No active email transport driver found.",
+    error: "No active email transport driver found. Configure RESEND_API_KEY or SMTP credentials.",
   };
 }
 
 // =============================================================================
-// 8 CORE PLATFORM EMAIL NOTIFICATION TRIGGERS
+// PLATFORM EMAIL NOTIFICATION TRIGGERS
 // =============================================================================
+
+// 0. Email One-Time Verification Code (OTP) for Login & Auth
+export async function sendOtpEmail(email: string, otpCode: string, expiryMinutes: number = 10): Promise<EmailDispatchResult> {
+  const html = renderBrandedHtml(
+    "Your Landora Verification Code",
+    `
+      <p>Hello,</p>
+      <p>Use the one-time verification code (OTP) below to securely sign in to your <strong>Landora</strong> account:</p>
+      
+      <div style="background-color: #f0f5f3; border: 2px dashed #0c4a3e; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0;">
+        <span style="font-size: 38px; font-weight: 900; letter-spacing: 10px; color: #0c4a3e; font-family: 'SF Mono', Consolas, Menlo, monospace; display: block;">
+          ${otpCode}
+        </span>
+        <p style="margin: 10px 0 0; font-size: 12px; color: #526b63; font-weight: 600;">
+          Valid for ${expiryMinutes} minutes &bull; Single-use verification code
+        </p>
+      </div>
+
+      <p style="font-size: 13px; color: #475569;">
+        If you did not request this code, you can safely ignore this email. Someone may have entered your email address by mistake. Your account remains secure.
+      </p>
+
+      <p style="font-size: 11px; color: #94a3b8; margin-top: 20px; border-top: 1px solid #e2e8f0; pt: 12px;">
+        &bull; <strong>Security Tip:</strong> Never share this code with anyone. Landora staff will never ask for your verification code.
+      </p>
+    `
+  );
+
+  return dispatchEmail({
+    to: email,
+    subject: `${otpCode} is your Landora verification code`,
+    html,
+    event: "LOGIN_OTP",
+  });
+}
 
 // 1. Registration Verification
 export async function sendRegistrationVerificationEmail(email: string, name: string, verifyToken: string): Promise<EmailDispatchResult> {

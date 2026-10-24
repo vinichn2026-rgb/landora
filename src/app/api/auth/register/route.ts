@@ -37,11 +37,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validRoles: UserRole[] = ["BUYER", "SELLER", "AGENT", "BUILDER", "ADMIN"];
-    const userRole: UserRole = validRoles.includes(role) ? role : "BUYER";
+    // Public registration allowed roles: BUYER, SELLER, AGENT, BUILDER
+    // Under no circumstances can a public registration grant ADMIN privileges
+    const allowedPublicRoles: UserRole[] = ["BUYER", "SELLER", "AGENT", "BUILDER"];
+    const userRole: UserRole = allowedPublicRoles.includes(role) ? role : "BUYER";
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Prevent public registration overriding initial authorized administrator
+    if (normalizedEmail === (process.env.INITIAL_ADMIN_EMAIL || "vinichn2026@gmail.com").toLowerCase().trim()) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "This authorized administrator account is reserved. Please sign in with OTP at /login." 
+        },
+        { status: 403 }
+      );
+    }
 
     // Check if user already exists
-    const existing = await DataAccess.findUserByEmail(email.trim());
+    const existing = await DataAccess.findUserByEmail(normalizedEmail);
     if (existing) {
       return NextResponse.json(
         { success: false, error: "An account with this email address already exists. Please sign in." },

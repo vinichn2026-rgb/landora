@@ -654,7 +654,7 @@ export default function Header({
                 </Link>
                 <Link
                   href="/register"
-                  className="hidden sm:inline-block text-xs font-bold px-2.5 py-1.5 rounded-lg transition text-slate-700 hover:text-slate-900 hover:bg-slate-100 whitespace-nowrap shrink-0"
+                  className="text-xs font-bold px-2.5 py-1.5 rounded-lg transition text-slate-700 hover:text-slate-900 hover:bg-slate-100 whitespace-nowrap shrink-0 border border-transparent sm:border-slate-200"
                 >
                   Register
                 </Link>
@@ -729,6 +729,62 @@ export default function Header({
                 <span>Dashboard</span>
               </Link>
             </div>
+
+            {/* Mobile Auth Profile / Log In Buttons */}
+            {user ? (
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Signed in as ({user.role})</span>
+                    <span className="text-xs font-bold text-slate-900">{user.name}</span>
+                    <span className="text-[11px] text-slate-500 block">{user.email}</span>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-[#0c4a3e] text-white flex items-center justify-center font-bold text-xs ring-2 ring-emerald-600/20">
+                    {user.name.charAt(0)}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                  {user.role === "ADMIN" && (
+                    <Link
+                      href="/admin/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="font-bold text-[#0c4a3e] hover:underline"
+                    >
+                      Admin Desk →
+                    </Link>
+                  )}
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="text-rose-600 font-bold hover:underline flex items-center gap-1 ml-auto cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="py-2.5 text-xs font-bold text-center border border-[#0c4a3e] text-[#0c4a3e] rounded-xl hover:bg-emerald-50 transition"
+                >
+                  Log In
+                </Link>
+                <Link
+                  href="/register"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="py-2.5 text-xs font-bold text-center bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition"
+                >
+                  Register
+                </Link>
+              </div>
+            )}
+
             <Link
               href="/post-property"
               onClick={() => setMobileMenuOpen(false)}

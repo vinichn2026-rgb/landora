@@ -18,6 +18,21 @@ interface AuthContextType {
   isLoading: boolean;
   savedIds: string[];
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  sendOtp: (email: string) => Promise<{
+    success: boolean;
+    emailSent?: boolean;
+    providerConfigured?: boolean;
+    message?: string;
+    error?: string;
+    devNotice?: string;
+    waitSeconds?: number;
+  }>;
+  verifyOtp: (email: string, code: string) => Promise<{
+    success: boolean;
+    user?: AuthUser;
+    error?: string;
+    redirectTo?: string;
+  }>;
   register: (data: {
     name: string;
     email: string;
@@ -102,6 +117,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       return { success: false, error: "Network error during login. Please try again." };
+    }
+  };
+
+  const sendOtp = async (email: string) => {
+    try {
+      const res = await fetch("/api/auth/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      return data;
+    } catch {
+      return { 
+        success: false, 
+        error: "Network connection error while requesting verification code. Please check your internet connection." 
+      };
+    }
+  };
+
+  const verifyOtp = async (email: string, code: string) => {
+    try {
+      const res = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      });
+      const data = await res.json();
+
+      if (data.success && data.user) {
+        setUser(data.user);
+        localStorage.setItem("landora_user", JSON.stringify(data.user));
+
+        // Fetch saved IDs for this user
+        try {
+          const savedRes = await fetch("/api/user/saved-properties");
+          const savedData = await savedRes.json();
+          if (savedData.success && savedData.savedIds) {
+            setSavedIds(savedData.savedIds);
+          }
+        } catch {}
+
+        return { 
+          success: true, 
+          user: data.user, 
+          redirectTo: data.redirectTo 
+        };
+      } else {
+        return { 
+          success: false, 
+          error: data.error || "Verification failed. Please check your code." 
+        };
+      }
+    } catch {
+      return { 
+        success: false, 
+        error: "Network connection error while verifying code." 
+      };
     }
   };
 
@@ -200,6 +273,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         savedIds,
         login,
+        sendOtp,
+        verifyOtp,
         register,
         logout,
         toggleSaveProperty,

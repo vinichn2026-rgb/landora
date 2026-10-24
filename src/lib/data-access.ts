@@ -406,11 +406,119 @@ export const DataAccess = {
   // ---------------------------------------------------------------------------
   // User Authentication & Profile
   // ---------------------------------------------------------------------------
+  async ensureInitialAdminUser(): Promise<UserItem> {
+    const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || "vinichn2026@gmail.com").toLowerCase().trim();
+    if (process.env.DATABASE_URL) {
+      try {
+        const existing = await prisma.user.findUnique({
+          where: { email: adminEmail },
+          include: { profile: true },
+        });
+        if (existing) {
+          if (existing.role !== "ADMIN") {
+            await prisma.user.update({
+              where: { id: existing.id },
+              data: { role: "ADMIN" },
+            });
+          }
+          return {
+            id: existing.id,
+            name: existing.name,
+            email: existing.email,
+            phoneNumber: existing.phoneNumber,
+            passwordHash: existing.passwordHash,
+            role: "ADMIN",
+            createdAt: existing.createdAt.toISOString(),
+            updatedAt: existing.updatedAt.toISOString(),
+            profile: existing.profile ? {
+              bio: existing.profile.bio,
+              companyName: existing.profile.companyName,
+              taxId: existing.profile.taxId,
+              reraRegistration: existing.profile.reraRegistration,
+              address: existing.profile.address,
+              city: existing.profile.city,
+              state: existing.profile.state,
+              pinCode: existing.profile.pinCode,
+              isPhoneVerified: existing.profile.isPhoneVerified,
+              isEmailVerified: existing.profile.isEmailVerified,
+            } : null,
+          };
+        }
+
+        const created = await prisma.user.create({
+          data: {
+            id: "user-admin-vinitha",
+            name: "Vinitha (Administrator)",
+            email: adminEmail,
+            phoneNumber: "+91 94433 00001",
+            role: "ADMIN",
+            profile: {
+              create: {
+                city: "Coimbatore",
+                state: "Tamil Nadu",
+                isPhoneVerified: true,
+                isEmailVerified: true,
+              },
+            },
+          },
+          include: { profile: true },
+        });
+
+        return {
+          id: created.id,
+          name: created.name,
+          email: created.email,
+          phoneNumber: created.phoneNumber,
+          passwordHash: created.passwordHash,
+          role: "ADMIN",
+          createdAt: created.createdAt.toISOString(),
+          updatedAt: created.updatedAt.toISOString(),
+          profile: created.profile ? {
+            bio: created.profile.bio,
+            companyName: created.profile.companyName,
+            taxId: created.profile.taxId,
+            reraRegistration: created.profile.reraRegistration,
+            address: created.profile.address,
+            city: created.profile.city,
+            state: created.profile.state,
+            pinCode: created.profile.pinCode,
+            isPhoneVerified: created.profile.isPhoneVerified,
+            isEmailVerified: created.profile.isEmailVerified,
+          } : null,
+        };
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL ensureInitialAdminUser error:", err);
+      }
+    }
+
+    let memoryUser = UserStore.findByEmail(adminEmail);
+    if (!memoryUser) {
+      memoryUser = UserStore.create({
+        name: "Vinitha (Administrator)",
+        email: adminEmail,
+        phoneNumber: "+91 94433 00001",
+        role: "ADMIN",
+        profile: {
+          city: "Coimbatore",
+          state: "Tamil Nadu",
+          isPhoneVerified: true,
+          isEmailVerified: true,
+        },
+      });
+    } else if (memoryUser.role !== "ADMIN") {
+      memoryUser.role = "ADMIN";
+    }
+    return memoryUser;
+  },
+
   async findUserByEmail(email: string): Promise<UserItem | null> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || "vinichn2026@gmail.com").toLowerCase().trim();
+
     if (process.env.DATABASE_URL) {
       try {
         const user = await prisma.user.findUnique({
-          where: { email: email.toLowerCase().trim() },
+          where: { email: normalizedEmail },
           include: { profile: true },
         });
         if (user) {
@@ -441,7 +549,12 @@ export const DataAccess = {
         console.warn("[DATA-ACCESS WARNING] PostgreSQL findUserByEmail error:", err);
       }
     }
-    return UserStore.findByEmail(email);
+
+    const found = UserStore.findByEmail(normalizedEmail);
+    if (!found && normalizedEmail === adminEmail) {
+      return this.ensureInitialAdminUser();
+    }
+    return found;
   },
 
   async findUserById(id: string): Promise<UserItem | null> {
@@ -486,7 +599,7 @@ export const DataAccess = {
     name: string;
     email: string;
     phoneNumber?: string;
-    passwordHash: string;
+    passwordHash?: string | null;
     role: UserRole;
     city?: string;
     state?: string;
@@ -498,7 +611,7 @@ export const DataAccess = {
             name: data.name,
             email: data.email.toLowerCase().trim(),
             phoneNumber: data.phoneNumber?.trim() || null,
-            passwordHash: data.passwordHash,
+            passwordHash: data.passwordHash || null,
             role: data.role as any,
             profile: {
               create: {
@@ -535,7 +648,7 @@ export const DataAccess = {
       name: data.name,
       email: data.email.toLowerCase().trim(),
       phoneNumber: data.phoneNumber || null,
-      passwordHash: data.passwordHash,
+      passwordHash: data.passwordHash || null,
       role: data.role,
       profile: {
         city: data.city || "Coimbatore",

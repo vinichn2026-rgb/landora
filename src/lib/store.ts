@@ -582,6 +582,22 @@ if (!globalThis.__landora_users) {
         isPhoneVerified: true,
         isEmailVerified: true,
       }
+    },
+    {
+      id: "user-admin-vinitha",
+      name: "Vinitha (Administrator)",
+      email: "vinichn2026@gmail.com",
+      phoneNumber: "+91 94433 00001",
+      passwordHash: DEFAULT_HASH,
+      role: "ADMIN",
+      createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+      updatedAt: new Date().toISOString(),
+      profile: {
+        city: "Coimbatore",
+        state: "Tamil Nadu",
+        isPhoneVerified: true,
+        isEmailVerified: true,
+      }
     }
   ];
 }

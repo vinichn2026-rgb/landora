@@ -72,6 +72,26 @@ async function main() {
     },
   });
 
+  const adminVinitha = await prisma.user.upsert({
+    where: { email: "vinichn2026@gmail.com" },
+    update: { role: UserRole.ADMIN },
+    create: {
+      id: "user-admin-vinitha",
+      name: "Vinitha (Administrator)",
+      email: "vinichn2026@gmail.com",
+      phoneNumber: "+91 94433 00001",
+      role: UserRole.ADMIN,
+      profile: {
+        create: {
+          city: "Coimbatore",
+          state: "Tamil Nadu",
+          isPhoneVerified: true,
+          isEmailVerified: true,
+        },
+      },
+    },
+  });
+
   console.log("✔ Users & Profiles seeded successfully.");
 
   // 2. Create Listing Packages
