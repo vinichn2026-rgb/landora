@@ -10,11 +10,16 @@ const SESSION_COOKIE_NAME = "landora_session";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Protect /dashboard and /admin routes
+  // Protect /dashboard, /admin, and posting property routes
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isAdminRoute = pathname.startsWith("/admin");
+  const isPostPropertyRoute = 
+    pathname.startsWith("/post-property") || 
+    pathname.startsWith("/sell/form") || 
+    pathname.startsWith("/sell/get-started") || 
+    pathname.startsWith("/sell/list");
 
-  if (!isDashboardRoute && !isAdminRoute) {
+  if (!isDashboardRoute && !isAdminRoute && !isPostPropertyRoute) {
     return NextResponse.next();
   }
 
@@ -64,5 +69,11 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/admin/:path*",
+    "/post-property/:path*",
+    "/post-property",
+    "/sell/form/:path*",
+    "/sell/form",
+    "/sell/get-started",
+    "/sell/list/:path*",
   ],
 };

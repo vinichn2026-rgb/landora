@@ -1,10 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DataAccess } from "@/lib/data-access";
 import { applyRateLimit } from "@/lib/rate-limit";
+import { getServerSessionUser } from "@/lib/auth";
+import { INITIAL_ADMIN_EMAIL } from "@/lib/constants";
+import { sendAdminNewEnquiryNotificationEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {
-    // Lead spam protection: max 10 enquiries per 5 minutes per IP
+    // 1. Server-side Authentication Guard: Require signed-in session
+    const sessionUser = await getServerSessionUser();
+    if (!sessionUser) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Authentication required. Please sign in to contact sellers or submit enquiries.",
+          requiresAuth: true 
+        },
+        { status: 401 }
+      );
+    }
+
+    // 2. Lead spam protection: max 10 enquiries per 5 minutes per IP
     const rateLimited = applyRateLimit(request, "property_enquiry", 10, 300000);
     if (rateLimited) return rateLimited;
 
@@ -12,16 +28,20 @@ export async function POST(request: NextRequest) {
 
     const { propertyId, buyerName, buyerEmail, buyerPhone, message, sellerId } = body;
 
+    const effectiveBuyerName = (buyerName || sessionUser.name || "Buyer").trim();
+    const effectiveBuyerEmail = (buyerEmail || sessionUser.email).trim().toLowerCase();
+    const effectiveBuyerPhone = (buyerPhone || sessionUser.phoneNumber || "").trim();
+
     // Validation
-    if (!propertyId || !buyerName || !buyerEmail || !buyerPhone || !message) {
+    if (!propertyId || !effectiveBuyerName || !effectiveBuyerEmail || !message) {
       return NextResponse.json(
-        { success: false, error: "All enquiry fields are required." },
+        { success: false, error: "Please provide your name, email, and inquiry message." },
         { status: 400 }
       );
     }
 
-    const cleanPhone = String(buyerPhone).replace(/\D/g, "");
-    if (cleanPhone.length < 10) {
+    const cleanPhone = String(effectiveBuyerPhone).replace(/\D/g, "");
+    if (cleanPhone.length > 0 && cleanPhone.length < 10) {
       return NextResponse.json(
         { success: false, error: "Please enter a valid 10-digit mobile number." },
         { status: 400 }
@@ -30,18 +50,46 @@ export async function POST(request: NextRequest) {
 
     const result = await DataAccess.createEnquiry({
       propertyId,
-      buyerName,
-      buyerEmail,
-      buyerPhone,
-      message,
+      buyerName: effectiveBuyerName,
+      buyerEmail: effectiveBuyerEmail,
+      buyerPhone: effectiveBuyerPhone || "Not specified",
+      message: message.trim(),
       sellerId: sellerId || "owner-01",
     });
 
     if (result.success) {
+      // Phase 6 Action-Auth: Notify Administrator of new buyer enquiry
+      const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || INITIAL_ADMIN_EMAIL).toLowerCase().trim();
+      const adminUser = await DataAccess.findUserByEmail(adminEmail);
+      const targetProperty = await DataAccess.getPropertyById(propertyId);
+      const propTitle = targetProperty?.title || "Property Listing";
+
+      if (adminUser) {
+        await DataAccess.createNotification({
+          userId: adminUser.id,
+          title: `New Buyer Enquiry: ${effectiveBuyerName}`,
+          message: `${effectiveBuyerName} enquired about "${propTitle}". Mobile: ${effectiveBuyerPhone || "N/A"}`,
+          type: "ADMIN_NEW_ENQUIRY",
+          link: "/admin/enquiries",
+          entityType: "ENQUIRY",
+          entityId: result.enquiryId,
+        });
+      }
+
+      // Dispatch administrator notification email
+      await sendAdminNewEnquiryNotificationEmail(
+        adminEmail,
+        propTitle,
+        effectiveBuyerName,
+        effectiveBuyerPhone || "N/A",
+        effectiveBuyerEmail,
+        message.trim()
+      );
+
       return NextResponse.json({
         success: true,
         enquiryId: result.enquiryId,
-        message: "Enquiry delivered to seller successfully.",
+        message: "Enquiry delivered to seller successfully. Confirmation sent to your email.",
       });
     } else {
       return NextResponse.json(

@@ -13,7 +13,11 @@ import {
   RotateCcw,
   Lock,
   Sparkles,
-  Info
+  Info,
+  Heart,
+  PhoneCall,
+  MessageSquare,
+  Building2
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -30,6 +34,8 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get("redirect");
+  const actionParam = searchParams.get("action");
+  const targetIdParam = searchParams.get("targetId");
 
   const { sendOtp, verifyOtp, login } = useAuth();
 
@@ -48,6 +54,7 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [devNotice, setDevNotice] = useState("");
+  const [suggestedCode, setSuggestedCode] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
@@ -66,6 +73,7 @@ function LoginForm() {
     setError("");
     setSuccessMsg("");
     setDevNotice("");
+    setSuggestedCode(null);
 
     const normalizedEmail = email.trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -75,12 +83,15 @@ function LoginForm() {
     }
 
     setIsSubmitting(true);
-    const res = await sendOtp(normalizedEmail);
+    const res: any = await sendOtp(normalizedEmail);
     setIsSubmitting(false);
 
     if (res.success) {
       setOtpStep("code");
       setCooldown(res.waitSeconds || OTP_COOLDOWN_SECONDS);
+      if (res.suggestedCode) {
+        setSuggestedCode(res.suggestedCode);
+      }
       if (res.emailSent) {
         setSuccessMsg(res.message || "A 6-digit verification code has been sent to your email.");
       } else {
@@ -95,6 +106,18 @@ function LoginForm() {
         setCooldown(res.waitSeconds);
       }
     }
+  };
+
+  const getPostLoginDestination = (defaultTarget?: string) => {
+    let target = redirectParam || defaultTarget || "/dashboard";
+    if (actionParam && !target.includes("action=")) {
+      const sep = target.includes("?") ? "&" : "?";
+      target += `${sep}action=${encodeURIComponent(actionParam)}`;
+      if (targetIdParam && !target.includes("targetId=")) {
+        target += `&targetId=${encodeURIComponent(targetIdParam)}`;
+      }
+    }
+    return target;
   };
 
   // Step 2: Verify OTP and Authenticate
@@ -113,8 +136,8 @@ function LoginForm() {
     setIsSubmitting(false);
 
     if (res.success) {
-      // Determine destination route
-      const destination = redirectParam || res.redirectTo || "/dashboard";
+      // Determine destination route with preserved action parameters
+      const destination = getPostLoginDestination(res.redirectTo);
       router.push(destination);
     } else {
       setError(res.error || "Invalid verification code. Please check and try again.");
@@ -142,7 +165,7 @@ function LoginForm() {
     setIsSubmitting(false);
 
     if (result.success) {
-      router.push(redirectParam || "/dashboard");
+      router.push(getPostLoginDestination());
     } else {
       setError(result.error || "Invalid email or password.");
     }
@@ -167,6 +190,55 @@ function LoginForm() {
       </div>
 
       <CardContent className="p-6">
+        {/* Action Context Banner */}
+        {actionParam === "save" && (
+          <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-900 text-xs rounded-xl flex items-start gap-2.5 animate-in fade-in">
+            <Heart className="w-4 h-4 text-rose-600 shrink-0 mt-0.5 fill-rose-100" />
+            <div>
+              <p className="font-bold">Sign In to Save Property</p>
+              <p className="text-[11px] text-rose-800 mt-0.5 leading-snug">
+                Log in to shortlist this property to your account. Once verified, it will be added to your saved list automatically.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {actionParam === "contact" && (
+          <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs rounded-xl flex items-start gap-2.5 animate-in fade-in">
+            <PhoneCall className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Sign In to Reveal Seller Contact</p>
+              <p className="text-[11px] text-emerald-800 mt-0.5 leading-snug">
+                Log in to view verified seller mobile number, WhatsApp, and email directly.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {actionParam === "enquire" && (
+          <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs rounded-xl flex items-start gap-2.5 animate-in fade-in">
+            <MessageSquare className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Sign In to Submit Enquiry & Schedule Visit</p>
+              <p className="text-[11px] text-emerald-800 mt-0.5 leading-snug">
+                Log in with your email OTP to send your message directly to the property owner.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!actionParam && redirectParam && (redirectParam.startsWith("/post-property") || redirectParam.startsWith("/sell")) && (
+          <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 text-amber-950 text-xs rounded-xl flex items-start gap-2.5 animate-in fade-in">
+            <Building2 className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Sign In to Post Property for Sale</p>
+              <p className="text-[11px] text-amber-900 mt-0.5 leading-snug">
+                Please sign in to publish your property listing. You will be redirected straight to the publishing form after verification.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Error Alert */}
         {error && (
           <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-medium leading-relaxed flex items-start gap-2 animate-in fade-in">
@@ -209,7 +281,17 @@ function LoginForm() {
               <p className="text-[11px] text-amber-800 mt-0.5 leading-snug">
                 {devNotice}
               </p>
-              {otpStep === "code" && email.toLowerCase() === INITIAL_ADMIN_EMAIL.toLowerCase() && (
+              {otpStep === "code" && suggestedCode && (
+                <button
+                  type="button"
+                  onClick={() => setOtpCode(suggestedCode)}
+                  className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold text-xs transition cursor-pointer border border-amber-300 shadow-xs"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-800" />
+                  <span>Click to auto-fill code {suggestedCode}</span>
+                </button>
+              )}
+              {otpStep === "code" && !suggestedCode && email.toLowerCase() === INITIAL_ADMIN_EMAIL.toLowerCase() && (
                 <button
                   type="button"
                   onClick={() => setOtpCode("123456")}

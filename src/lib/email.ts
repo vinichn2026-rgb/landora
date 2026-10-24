@@ -590,3 +590,85 @@ export async function sendPaymentStatusEmail(
     event: isSuccess ? "PAYMENT_CONFIRMATION" : "PAYMENT_FAILED",
   });
 }
+
+// 9. Administrator Notification: New Property Submitted for Review
+export async function sendAdminNewPropertyNotificationEmail(
+  adminEmail: string,
+  propertyTitle: string,
+  sellerName: string,
+  sellerEmail: string,
+  city: string,
+  price: number,
+  propertyId: string
+): Promise<EmailDispatchResult> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const adminUrl = `${baseUrl}/admin/properties`;
+
+  const html = renderBrandedHtml(
+    "New Property Submitted for Moderation Review",
+    `
+      <p>Hello Administrator,</p>
+      <p>A new property listing has been submitted by an advertiser and is awaiting moderation verification:</p>
+
+      <div style="background-color: #f8fafc; padding: 18px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 18px 0;">
+        <p style="margin: 0 0 8px; font-size: 14px;"><strong style="color: #0c4a3e;">${propertyTitle}</strong></p>
+        <p style="margin: 0 0 6px; font-size: 13px; color: #475569;"><strong>Location:</strong> ${city}, Tamil Nadu</p>
+        <p style="margin: 0 0 6px; font-size: 13px; color: #475569;"><strong>Price:</strong> ₹${price.toLocaleString("en-IN")}</p>
+        <p style="margin: 0 0 6px; font-size: 13px; color: #475569;"><strong>Submitted By:</strong> ${sellerName} (${sellerEmail})</p>
+        <p style="margin: 0; font-size: 12px; color: #94a3b8; font-family: monospace;">Listing ID: ${propertyId}</p>
+      </div>
+
+      <p style="font-size: 12px; color: #64748b;">
+        Please review the statutory layout approvals, documents, and pricing before publishing to buyer search results.
+      </p>
+    `,
+    { text: "Open Admin Moderation Desk", url: adminUrl }
+  );
+
+  return dispatchEmail({
+    to: adminEmail,
+    subject: `[Admin Action] New Property Pending Review: ${propertyTitle}`,
+    html,
+    event: "ADMIN_NEW_PROPERTY_SUBMITTED",
+  });
+}
+
+// 10. Administrator Notification: New Buyer Enquiry Received
+export async function sendAdminNewEnquiryNotificationEmail(
+  adminEmail: string,
+  propertyTitle: string,
+  buyerName: string,
+  buyerPhone: string,
+  buyerEmail: string,
+  message: string
+): Promise<EmailDispatchResult> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const adminEnquiriesUrl = `${baseUrl}/admin/enquiries`;
+
+  const html = renderBrandedHtml(
+    "New Buyer Lead Received on Landora",
+    `
+      <p>Hello Administrator,</p>
+      <p>A prospective buyer has submitted a new property inquiry / site visit request on the marketplace:</p>
+
+      <div style="background-color: #f8fafc; padding: 18px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 18px 0;">
+        <p style="margin: 0 0 8px; font-size: 13px;"><strong>Target Property:</strong> ${propertyTitle}</p>
+        <p style="margin: 0 0 8px; font-size: 13px;"><strong>Buyer Name:</strong> ${buyerName}</p>
+        <p style="margin: 0 0 8px; font-size: 13px;"><strong>Mobile:</strong> <a href="tel:${buyerPhone}" style="color: #0c4a3e; font-weight: bold;">${buyerPhone}</a></p>
+        <p style="margin: 0 0 10px; font-size: 13px;"><strong>Email:</strong> <a href="mailto:${buyerEmail}" style="color: #0c4a3e;">${buyerEmail}</a></p>
+        <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+          <strong style="font-size: 11px; text-transform: uppercase; color: #64748b;">Inquiry Message:</strong>
+          <p style="margin: 4px 0 0; font-size: 13px; color: #1e293b; font-style: italic;">&ldquo;${message}&rdquo;</p>
+        </div>
+      </div>
+    `,
+    { text: "View All Platform Enquiries", url: adminEnquiriesUrl }
+  );
+
+  return dispatchEmail({
+    to: adminEmail,
+    subject: `[Admin Alert] New Lead: ${buyerName} enquired about ${propertyTitle}`,
+    html,
+    event: "ADMIN_NEW_ENQUIRY",
+  });
+}

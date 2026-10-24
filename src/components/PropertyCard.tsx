@@ -24,12 +24,22 @@ export default function PropertyCard({
   onToggleSave,
   isSaved: propIsSaved 
 }: PropertyCardProps) {
-  const { isSaved: authIsSaved, toggleSaveProperty } = useAuth();
+  const { user, isSaved: authIsSaved, toggleSaveProperty } = useAuth();
   const isHeartActive = propIsSaved !== undefined ? propIsSaved : authIsSaved(property.id);
 
   const handleSaveClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Action-based authentication: Require login to save favourites
+    if (!user) {
+      if (typeof window !== "undefined") {
+        const currentUrl = window.location.pathname + window.location.search;
+        window.location.href = `/login?redirect=${encodeURIComponent(currentUrl)}&action=save&targetId=${property.id}`;
+      }
+      return;
+    }
+
     if (onToggleSave) {
       onToggleSave(property.id);
     } else {

@@ -792,6 +792,9 @@ export const DataAccess = {
   },
 
   async toggleSavedProperty(userId: string, propertyId: string): Promise<{ isSaved: boolean; count: number }> {
+    if (!userId || !userId.trim()) {
+      throw new Error("Authentication required to save properties.");
+    }
     if (process.env.DATABASE_URL) {
       try {
         const existing = await prisma.savedProperty.findUnique({

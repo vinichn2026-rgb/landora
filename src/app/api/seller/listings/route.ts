@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSessionUser } from "@/lib/auth";
 import { DataAccess } from "@/lib/data-access";
 import { PropertyCategoryType, ListingType } from "@/types";
-import { sendListingSubmittedEmail } from "@/lib/email";
+import { sendListingSubmittedEmail, sendAdminNewPropertyNotificationEmail } from "@/lib/email";
+import { INITIAL_ADMIN_EMAIL } from "@/lib/constants";
 
 // GET /api/seller/listings - Retrieve all listings for the authenticated user
 export async function GET(request: NextRequest) {
@@ -222,6 +223,31 @@ export async function POST(request: NextRequest) {
           createdProperty.id
         );
       }
+
+      // Phase 6 Action-Auth: Notify Administrator of new property submission
+      const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || INITIAL_ADMIN_EMAIL).toLowerCase().trim();
+      const adminUser = await DataAccess.findUserByEmail(adminEmail);
+      if (adminUser) {
+        await DataAccess.createNotification({
+          userId: adminUser.id,
+          title: "New Property Submitted for Moderation",
+          message: `${effectiveSellerName} submitted "${createdProperty.title}" in ${createdProperty.city} for review.`,
+          type: "ADMIN_MODERATION_PENDING",
+          link: "/admin/properties",
+          entityType: "PROPERTY",
+          entityId: createdProperty.id,
+        });
+      }
+
+      await sendAdminNewPropertyNotificationEmail(
+        adminEmail,
+        createdProperty.title,
+        effectiveSellerName,
+        effectiveSellerEmail,
+        createdProperty.city,
+        Number(createdProperty.price),
+        createdProperty.id
+      );
     }
 
     return NextResponse.json({

@@ -54,6 +54,18 @@ export async function POST(request: NextRequest) {
           message: `Verification code sent to ${email}.`,
           expiresInMinutes: otpResult.expiresInMinutes,
         });
+      } else if (dispatch.error?.includes("Sandbox") || dispatch.error?.includes("only send testing emails")) {
+        console.log(`[LANDORA AUTH - RESEND SANDBOX CODE]: ${otpResult.code} for ${email}`);
+        return NextResponse.json({
+          success: true,
+          emailSent: false,
+          providerConfigured: true,
+          sandboxRestricted: true,
+          suggestedCode: otpResult.code,
+          message: `Resend Sandbox Notice: Direct email to ${email} requires a verified domain on Resend.`,
+          devNotice: `Resend Sandbox Mode: Free sandbox delivers to vinichn2026@gmail.com. For this email (${email}), your verification code is: ${otpResult.code}`,
+          expiresInMinutes: otpResult.expiresInMinutes,
+        });
       } else {
         return NextResponse.json(
           {

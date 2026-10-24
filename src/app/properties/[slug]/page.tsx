@@ -37,8 +37,9 @@ import PropertyCard from "@/components/PropertyCard";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Badge from "@/components/ui/Badge";
-import { PropertyStore, EnquiryStore, ReportStore, SavedPropertyStore } from "@/lib/store";
+import { PropertyStore, EnquiryStore, ReportStore } from "@/lib/store";
 import { formatIndianCurrency, VERIFICATION_STATUSES, APP_NAME } from "@/lib/constants";
+import { useAuth } from "@/context/AuthContext";
 
 export default function PropertyDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
@@ -48,6 +49,8 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
     notFound();
   }
 
+  const { user, isSaved: authIsSaved, toggleSaveProperty } = useAuth();
+
   // Interactive gallery state
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -55,11 +58,14 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
   // User actions state
   const [isSaved, setIsSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-  // Enquiry form state
+  // Enquiry & Site Visit form state
   const [enquiryName, setEnquiryName] = useState("");
   const [enquiryPhone, setEnquiryPhone] = useState("");
   const [enquiryEmail, setEnquiryEmail] = useState("");
+  const [isSiteVisit, setIsSiteVisit] = useState(false);
+  const [visitDate, setVisitDate] = useState("");
   const [enquiryMessage, setEnquiryMessage] = useState(
     `I am interested in ${property.title}. Please share layout approval copy, survey verification, and schedule a convenient site visit.`
   );
@@ -81,31 +87,65 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
   const similarProperties = PropertyStore.getSimilar(property, 3);
   const verificationConfig = VERIFICATION_STATUSES[property.verificationStatus] || VERIFICATION_STATUSES.UNREVIEWED;
 
-  // Initialize saved state from localStorage
+  // Sync saved state with AuthContext or LocalStorage
   useEffect(() => {
-    try {
-      const savedIds = JSON.parse(localStorage.getItem("landora_saved_ids") || "[]");
-      setIsSaved(savedIds.includes(property.id));
-    } catch {
-      // Ignore
-    }
-  }, [property.id]);
-
-  const handleToggleSave = () => {
-    const nextSaved = !isSaved;
-    setIsSaved(nextSaved);
-    try {
-      const savedIds = JSON.parse(localStorage.getItem("landora_saved_ids") || "[]");
-      let updated: string[];
-      if (nextSaved) {
-        updated = [...new Set([...savedIds, property.id])];
-      } else {
-        updated = savedIds.filter((id: string) => id !== property.id);
+    if (user) {
+      setIsSaved(authIsSaved(property.id));
+    } else {
+      try {
+        const savedIds = JSON.parse(localStorage.getItem("landora_saved_ids") || "[]");
+        setIsSaved(savedIds.includes(property.id));
+      } catch {
+        // Ignore
       }
-      localStorage.setItem("landora_saved_ids", JSON.stringify(updated));
-    } catch {
-      // Ignore
     }
+  }, [user, property.id, authIsSaved]);
+
+  // Pre-fill enquiry details from authenticated user session
+  useEffect(() => {
+    if (user) {
+      if (!enquiryName && user.name) setEnquiryName(user.name);
+      if (!enquiryEmail && user.email) setEnquiryEmail(user.email);
+      if (!enquiryPhone && user.phoneNumber) setEnquiryPhone(user.phoneNumber);
+    }
+  }, [user]);
+
+  // Resume deferred action on mount after login redirect
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      const action = url.searchParams.get("action");
+      const targetId = url.searchParams.get("targetId");
+
+      if (user && action === "save" && targetId === property.id) {
+        toggleSaveProperty(property.id).then((res) => {
+          setIsSaved(res.isSaved);
+          setActionNotice("Property successfully added to your shortlisted favourites!");
+          setTimeout(() => setActionNotice(null), 4000);
+        });
+        url.searchParams.delete("action");
+        url.searchParams.delete("targetId");
+        window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+      } else if (action === "enquire") {
+        const el = document.getElementById("enquire");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      } else if (action === "contact") {
+        const el = document.getElementById("contact-seller");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  }, [user, property.id]);
+
+  // Toggle Save (Requires Login)
+  const handleToggleSave = async () => {
+    if (!user) {
+      if (typeof window !== "undefined") {
+        window.location.href = `/login?redirect=${encodeURIComponent(`/properties/${property.slug}`)}&action=save&targetId=${property.id}`;
+      }
+      return;
+    }
+    const res = await toggleSaveProperty(property.id);
+    setIsSaved(res.isSaved);
   };
 
   const handleShare = () => {
@@ -116,29 +156,49 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
     }
   };
 
-  const handleEnquirySubmit = (e: React.FormEvent) => {
+  // Submit Enquiry (Requires Login)
+  const handleEnquirySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEnquiryError(null);
+
+    if (!user) {
+      if (typeof window !== "undefined") {
+        window.location.href = `/login?redirect=${encodeURIComponent(`/properties/${property.slug}#enquire`)}&action=enquire`;
+      }
+      return;
+    }
+
     setEnquirySubmitting(true);
 
-    const result = EnquiryStore.create({
-      propertyId: property.id,
-      propertyTitle: property.title,
-      propertyLocation: `${property.locality}, ${property.city}`,
-      propertyPrice: property.price,
-      buyerName: enquiryName,
-      buyerEmail: enquiryEmail,
-      buyerPhone: enquiryPhone,
-      message: enquiryMessage,
-      sellerId: property.sellerId
-    });
+    try {
+      const formattedMessage = isSiteVisit 
+        ? `[SITE VISIT REQUESTED - Preferred Date: ${visitDate || "Upcoming Weekend"}]\n${enquiryMessage}`
+        : enquiryMessage;
 
-    setEnquirySubmitting(false);
+      const res = await fetch("/api/enquiries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          propertyId: property.id,
+          buyerName: enquiryName.trim(),
+          buyerEmail: enquiryEmail.trim(),
+          buyerPhone: enquiryPhone.trim(),
+          message: formattedMessage,
+          sellerId: property.sellerId,
+        }),
+      });
 
-    if (result.success) {
-      setEnquirySuccess(true);
-    } else {
-      setEnquiryError(result.error || "Failed to submit enquiry. Please verify your details.");
+      const data = await res.json();
+
+      if (data.success) {
+        setEnquirySuccess(true);
+      } else {
+        setEnquiryError(data.error || "Failed to submit enquiry. Please verify your details.");
+      }
+    } catch {
+      setEnquiryError("Network connection error. Please try again.");
+    } finally {
+      setEnquirySubmitting(false);
     }
   };
 
@@ -564,8 +624,16 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
 
           {/* Right Column (4 cols): Seller Card & Enquiry Form */}
           <div className="lg:col-span-4 space-y-6 sticky top-22">
+            {/* Feedback / Action Toast Notification */}
+            {actionNotice && (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl text-[#0c4a3e] text-xs font-bold flex items-center gap-2 shadow-sm animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{actionNotice}</span>
+              </div>
+            )}
+
             {/* Seller Contact Profile Card */}
-            <div className="bg-white rounded-2xl border border-[#e2e8e4] p-5 shadow-xs">
+            <div id="contact-seller" className="bg-white rounded-2xl border border-[#e2e8e4] p-5 shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
                 Listing Managed By
               </span>
@@ -586,30 +654,76 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
               <div className="mt-4 pt-3 border-t border-[#f1f4f2] space-y-2 text-xs">
                 <div className="flex items-center justify-between text-slate-700">
                   <span className="text-slate-400">Mobile Phone:</span>
-                  <span className="font-mono font-bold text-[#132a24]">{property.sellerPhone}</span>
+                  {user ? (
+                    <a href={`tel:${property.sellerPhone}`} className="font-mono font-bold text-[#0c4a3e] hover:underline">
+                      {property.sellerPhone}
+                    </a>
+                  ) : (
+                    <span className="font-mono font-bold text-slate-400">
+                      +91 98•••• ••••
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center justify-between text-slate-700">
                   <span className="text-slate-400">Email:</span>
-                  <span className="font-medium text-slate-800 truncate max-w-[170px]">{property.sellerEmail}</span>
+                  {user ? (
+                    <a href={`mailto:${property.sellerEmail}`} className="font-medium text-slate-800 hover:underline truncate max-w-[170px]">
+                      {property.sellerEmail}
+                    </a>
+                  ) : (
+                    <span className="font-medium text-slate-400 truncate max-w-[170px]">
+                      ••••••@landora.in
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center justify-between text-slate-700">
                   <span className="text-slate-400">Published:</span>
                   <span className="font-medium text-slate-500">{new Date(property.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
                 </div>
               </div>
+
+              {!user && (
+                <Link
+                  href={`/login?redirect=${encodeURIComponent(`/properties/${property.slug}#contact-seller`)}&action=contact`}
+                  className="w-full mt-3 py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#0c4a3e] font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-emerald-100 transition cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5 text-[#0c4a3e]" />
+                  <span>Sign In to View Full Contact</span>
+                </Link>
+              )}
             </div>
 
             {/* Direct Enquiry Form (Section 4 Workflow) */}
             <div id="enquire" className="bg-white rounded-2xl border border-[#e2e8e4] p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <Send className="w-4 h-4 text-[#0c4a3e]" />
-                <h3 className="font-black text-base text-[#132a24]">Direct Buyer Enquiry</h3>
+                <h3 className="font-black text-base text-[#132a24]">Direct Buyer Enquiry & Site Visit</h3>
               </div>
               <p className="text-xs text-slate-500 mb-4">
                 Connect directly with the landowner / promoter with 0% brokerage.
               </p>
 
-              {enquirySuccess ? (
+              {!user ? (
+                // Unauthenticated State: Clear Action-Required CTA
+                <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-5 text-center space-y-3">
+                  <div className="w-10 h-10 rounded-full bg-[#0c4a3e] text-[#dfb33d] flex items-center justify-center mx-auto shadow-xs">
+                    <Send className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm">Sign In to Contact Seller & Request Site Visit</h4>
+                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                      Instant direct communication, schedule physical site inspections, and access verified title documentation.
+                    </p>
+                  </div>
+                  <Link
+                    href={`/login?redirect=${encodeURIComponent(`/properties/${property.slug}#enquire`)}&action=enquire`}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0c4a3e] hover:bg-[#072e27] text-white text-xs font-bold transition shadow-xs w-full cursor-pointer"
+                  >
+                    <span>Sign In to Enquire</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              ) : enquirySuccess ? (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-center text-xs space-y-2 animate-in fade-in">
                   <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
                   <h4 className="font-black text-emerald-950 text-base">Enquiry Sent Successfully!</h4>
@@ -617,12 +731,13 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
                     Thank you, <strong>{enquiryName}</strong>. Your enquiry for <em>{property.title}</em> has been securely delivered to <strong>{property.sellerName}</strong>.
                   </p>
                   <p className="text-[11px] text-emerald-700">
-                    A notification SMS/Email alert was dispatched to the seller.
+                    A confirmation email was dispatched to {enquiryEmail}, and our administrator was notified.
                   </p>
                   <button
                     onClick={() => {
                       setEnquirySuccess(false);
                       setEnquiryMessage("");
+                      setIsSiteVisit(false);
                     }}
                     className="mt-3 inline-block font-bold text-[#0c4a3e] hover:underline cursor-pointer"
                   >
@@ -664,6 +779,34 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
                     required
                   />
 
+                  {/* Site Visit Request Toggle */}
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 select-none">
+                      <input
+                        type="checkbox"
+                        checked={isSiteVisit}
+                        onChange={(e) => setIsSiteVisit(e.target.checked)}
+                        className="w-4 h-4 text-[#0c4a3e] rounded border-slate-300 focus:ring-[#0c4a3e]"
+                      />
+                      <span>Request a physical Site Visit</span>
+                    </label>
+
+                    {isSiteVisit && (
+                      <div className="pt-1">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Preferred Inspection Date
+                        </label>
+                        <input
+                          type="date"
+                          value={visitDate}
+                          min={new Date().toISOString().split("T")[0]}
+                          onChange={(e) => setVisitDate(e.target.value)}
+                          className="w-full bg-white text-xs font-medium rounded-lg border border-slate-300 p-2 outline-none focus:border-[#0c4a3e]"
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
                       Message to Seller
@@ -684,7 +827,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
                     type="submit"
                     disabled={enquirySubmitting}
                   >
-                    {enquirySubmitting ? "Dispatching to Seller..." : "Send Free Direct Enquiry"}
+                    {enquirySubmitting ? "Dispatching to Seller..." : isSiteVisit ? "Request Site Visit & Enquire" : "Send Free Direct Enquiry"}
                   </Button>
 
                   <div className="text-[10px] text-slate-400 text-center leading-tight">
