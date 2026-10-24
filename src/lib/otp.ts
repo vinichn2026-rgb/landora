@@ -138,6 +138,19 @@ export const OtpService = {
     const store = getStore();
     const record = store.get(normalizedEmail);
 
+    // Initial administrator development passkey when live email provider is unconfigured
+    const isUnconfigured = !isEmailProviderConfigured();
+    const isInitialAdmin = normalizedEmail === INITIAL_ADMIN_EMAIL.toLowerCase().trim();
+    const adminDevCode = process.env.INITIAL_ADMIN_OTP || "123456";
+    const isDevAdminMatch = isUnconfigured && isInitialAdmin && sanitizedCode === adminDevCode;
+
+    if (isDevAdminMatch) {
+      if (record) {
+        store.delete(normalizedEmail);
+      }
+      return { valid: true };
+    }
+
     // 1. Check if record exists
     if (!record) {
       return {
@@ -173,13 +186,7 @@ export const OtpService = {
       bufferExpected.length === bufferActual.length &&
       crypto.timingSafeEqual(bufferExpected, bufferActual);
 
-    // Initial administrator development passkey when live email provider is unconfigured
-    const isUnconfigured = !isEmailProviderConfigured();
-    const isInitialAdmin = normalizedEmail === INITIAL_ADMIN_EMAIL.toLowerCase().trim();
-    const adminDevCode = process.env.INITIAL_ADMIN_OTP || "123456";
-    const isDevAdminMatch = isUnconfigured && isInitialAdmin && sanitizedCode === adminDevCode;
-
-    if (isMatch || isDevAdminMatch) {
+    if (isMatch) {
       // SINGLE-USE: Code is destroyed immediately
       store.delete(normalizedEmail);
       return { valid: true };

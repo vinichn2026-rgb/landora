@@ -81,7 +81,11 @@ function LoginForm() {
     if (res.success) {
       setOtpStep("code");
       setCooldown(res.waitSeconds || OTP_COOLDOWN_SECONDS);
-      setSuccessMsg(res.message || "A 6-digit verification code has been generated.");
+      if (res.emailSent) {
+        setSuccessMsg(res.message || "A 6-digit verification code has been sent to your email.");
+      } else {
+        setSuccessMsg("");
+      }
       if (res.devNotice) {
         setDevNotice(res.devNotice);
       }
@@ -181,13 +185,23 @@ function LoginForm() {
 
         {/* Development Provider Guidance Notice */}
         {devNotice && (
-          <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl leading-relaxed flex items-start gap-2 animate-in fade-in">
+          <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl leading-relaxed flex items-start gap-2.5 animate-in fade-in">
             <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <p className="font-bold">Email Provider Notice:</p>
               <p className="text-[11px] text-amber-800 mt-0.5 leading-snug">
                 {devNotice}
               </p>
+              {otpStep === "code" && email.toLowerCase() === INITIAL_ADMIN_EMAIL.toLowerCase() && (
+                <button
+                  type="button"
+                  onClick={() => setOtpCode("123456")}
+                  className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold text-xs transition cursor-pointer border border-amber-300 shadow-xs"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-800" />
+                  <span>Click to auto-fill code 123456</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -303,10 +317,10 @@ function LoginForm() {
                       pattern="[0-9]*"
                       maxLength={6}
                       autoFocus
-                      placeholder="000000"
+                      placeholder="------"
                       value={otpCode}
                       onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      className="w-full text-center text-2xl font-black font-mono tracking-[0.35em] py-3.5 px-4 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0c4a3e] focus:border-transparent transition text-slate-900 bg-slate-50/50"
+                      className="w-full text-center text-2xl font-black font-mono tracking-[0.35em] py-3.5 px-4 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0c4a3e] focus:border-transparent transition text-slate-900 bg-slate-50/50 placeholder:text-slate-300"
                       required
                     />
                     <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
