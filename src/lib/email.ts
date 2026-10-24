@@ -20,7 +20,12 @@ export interface EmailDispatchResult {
 }
 
 export function getResendApiKey(): string | null {
-  const envVal = process.env.RESEND_API_KEY;
+  const envVal = 
+    process.env.RESEND_API_KEY || 
+    process.env.NEXT_PUBLIC_RESEND_API_KEY || 
+    process.env.RESEND_KEY ||
+    process.env.RESEND_TOKEN;
+
   if (!envVal) return null;
   const match = envVal.match(/re_[A-Za-z0-9_]{15,}/);
   if (match && !match[0].includes("your_api_key")) {
