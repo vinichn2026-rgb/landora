@@ -62,12 +62,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </p>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300 text-left space-y-1">
-            <div className="text-[10px] uppercase font-bold text-slate-400">Default Demo Admin Credentials:</div>
-            <div><strong>Email:</strong> admin@landora.in</div>
-            <div><strong>Password:</strong> Password@123</div>
-          </div>
-
           <div className="flex flex-col sm:flex-row gap-2 pt-2">
             <Link
               href="/login"

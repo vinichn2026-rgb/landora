@@ -28,7 +28,7 @@ import {
   CardContent 
 } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
-import { APP_NAME, INITIAL_ADMIN_EMAIL, OTP_COOLDOWN_SECONDS } from "@/lib/constants";
+import { APP_NAME, OTP_COOLDOWN_SECONDS } from "@/lib/constants";
 
 function LoginForm() {
   const router = useRouter();
@@ -45,8 +45,8 @@ function LoginForm() {
   // Step for OTP: "email" (step 1) or "code" (step 2)
   const [otpStep, setOtpStep] = useState<"email" | "code">("email");
 
-  // Form inputs - Pre-fill with initial authorized email
-  const [email, setEmail] = useState(INITIAL_ADMIN_EMAIL);
+  // Form inputs
+  const [email, setEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [password, setPassword] = useState("");
 
@@ -291,16 +291,6 @@ function LoginForm() {
                   <span>Click to auto-fill code {suggestedCode}</span>
                 </button>
               )}
-              {otpStep === "code" && !suggestedCode && email.toLowerCase() === INITIAL_ADMIN_EMAIL.toLowerCase() && (
-                <button
-                  type="button"
-                  onClick={() => setOtpCode("123456")}
-                  className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold text-xs transition cursor-pointer border border-amber-300 shadow-xs"
-                >
-                  <KeyRound className="w-3.5 h-3.5 text-amber-800" />
-                  <span>Click to auto-fill code 123456</span>
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -325,40 +315,6 @@ function LoginForm() {
                     required
                     autoFocus
                   />
-                </div>
-
-                {/* Pre-fill Quick Action Pill for Initial Authorised Admin */}
-                <div className="pt-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    Authorized Initial Account:
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail(INITIAL_ADMIN_EMAIL);
-                      setError("");
-                    }}
-                    className={`w-full text-left p-2.5 rounded-xl border transition text-xs flex items-center justify-between cursor-pointer ${
-                      email.toLowerCase() === INITIAL_ADMIN_EMAIL.toLowerCase()
-                        ? "bg-emerald-50/80 border-[#0c4a3e]/30 text-[#0c4a3e]"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <div>
-                      <div className="font-bold flex items-center gap-1.5">
-                        <span>Vinitha (Administrator)</span>
-                        <span className="bg-[#c59b27] text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded uppercase">
-                          ADMIN
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                        {INITIAL_ADMIN_EMAIL}
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-bold text-[#0c4a3e] underline">
-                      {email.toLowerCase() === INITIAL_ADMIN_EMAIL.toLowerCase() ? "Selected" : "Use Email"}
-                    </span>
-                  </button>
                 </div>
 
                 <Button
