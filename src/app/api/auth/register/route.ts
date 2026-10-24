@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { DataAccess } from "@/lib/data-access";
 import { hashPassword, signSessionToken, setServerSessionCookie } from "@/lib/auth";
 import { UserRole } from "@/types";
-import { sendRegistrationVerificationEmail } from "@/lib/email";
+import { sendRegistrationVerificationEmail, sendAdminNewUserRegistrationEmail } from "@/lib/email";
 import { applyRateLimit } from "@/lib/rate-limit";
+import { INITIAL_ADMIN_EMAIL } from "@/lib/constants";
 
 export async function POST(request: NextRequest) {
   try {
@@ -105,6 +106,46 @@ export async function POST(request: NextRequest) {
       user.name,
       `vfy_${Date.now()}_${Math.floor(Math.random() * 1000)}`
     );
+
+    // Send email alert to administrator for new user registration
+    const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || INITIAL_ADMIN_EMAIL).toLowerCase().trim();
+    sendAdminNewUserRegistrationEmail(adminEmail, {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      city: city || "Coimbatore",
+      phoneNumber: user.phoneNumber,
+    }).catch(err => console.error("[AUTH] sendAdminNewUserRegistrationEmail error:", err));
+
+    // Create in-app notification for administrator
+    const adminUser = await DataAccess.findUserByEmail(adminEmail);
+    if (adminUser) {
+      DataAccess.createNotification({
+        userId: adminUser.id,
+        title: `New User Registered: ${user.name}`,
+        message: `${user.name} (${user.email}) registered as ${user.role}.`,
+        type: "ADMIN_NEW_USER",
+        link: "/admin/users",
+        entityType: "USER",
+        entityId: user.id,
+      }).catch(() => {});
+    }
+
+    // Record initial registration login activity
+    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "127.0.0.1";
+    const userAgent = request.headers.get("user-agent") || undefined;
+
+    await DataAccess.recordSuccessfulLogin({
+      userId: user.id,
+      email: user.email,
+      userName: user.name,
+      role: user.role,
+      eventType: "REGISTER_INITIAL",
+      ipAddress,
+      userAgent,
+      details: "New account registered & authenticated",
+    });
 
     return NextResponse.json({
       success: true,

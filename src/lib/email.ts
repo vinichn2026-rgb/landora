@@ -672,3 +672,87 @@ export async function sendAdminNewEnquiryNotificationEmail(
     event: "ADMIN_NEW_ENQUIRY",
   });
 }
+
+// 11. Administrator Notification: New User Registered for First Time
+export async function sendAdminNewUserRegistrationEmail(
+  adminEmail: string,
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    city?: string;
+    phoneNumber?: string | null;
+  }
+): Promise<EmailDispatchResult> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://landora.in";
+  const adminUsersUrl = `${baseUrl}/admin/users`;
+  const formattedTime = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+
+  const html = renderBrandedHtml(
+    "New User Registered on Landora",
+    `
+      <p>Hello Administrator,</p>
+      <p>A new user has created an account on the Landora marketplace:</p>
+
+      <div style="background-color: #f8fafc; padding: 18px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 18px 0;">
+        <p style="margin: 0 0 8px; font-size: 13px;"><strong>User Name:</strong> ${user.name}</p>
+        <p style="margin: 0 0 8px; font-size: 13px;"><strong>Email Address:</strong> <a href="mailto:${user.email}" style="color: #0c4a3e; font-weight: bold;">${user.email}</a></p>
+        <p style="margin: 0 0 8px; font-size: 13px;"><strong>Assigned Role:</strong> <span style="background-color: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">${user.role}</span></p>
+        ${user.phoneNumber ? `<p style="margin: 0 0 8px; font-size: 13px;"><strong>Mobile:</strong> ${user.phoneNumber}</p>` : ""}
+        ${user.city ? `<p style="margin: 0 0 8px; font-size: 13px;"><strong>City:</strong> ${user.city}</p>` : ""}
+        <p style="margin: 0; font-size: 12px; color: #64748b;"><strong>Registered At:</strong> ${formattedTime} IST</p>
+      </div>
+    `,
+    { text: "View User Management Desk", url: adminUsersUrl }
+  );
+
+  return dispatchEmail({
+    to: adminEmail,
+    subject: `[Admin Alert] New User Registered: ${user.name} (${user.role})`,
+    html,
+    event: "ADMIN_NEW_USER_REGISTERED",
+  });
+}
+
+// 12. Optional & Configurable Administrator Notification: User Login Activity
+export async function sendAdminUserLoginNotificationEmail(
+  adminEmail: string,
+  loginInfo: {
+    email: string;
+    userName?: string;
+    role?: string;
+    eventType: string;
+    ipAddress?: string | null;
+    timestamp?: string;
+  }
+): Promise<EmailDispatchResult> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://landora.in";
+  const adminDashboardUrl = `${baseUrl}/admin/dashboard`;
+  const timeStr = loginInfo.timestamp || new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+
+  const html = renderBrandedHtml(
+    "User Login Activity Recorded",
+    `
+      <p>Hello Administrator,</p>
+      <p>A user has logged in to the Landora platform:</p>
+
+      <div style="background-color: #f8fafc; padding: 18px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 18px 0;">
+        <p style="margin: 0 0 8px; font-size: 13px;"><strong>Account:</strong> ${loginInfo.email}</p>
+        ${loginInfo.userName ? `<p style="margin: 0 0 8px; font-size: 13px;"><strong>Name:</strong> ${loginInfo.userName}</p>` : ""}
+        ${loginInfo.role ? `<p style="margin: 0 0 8px; font-size: 13px;"><strong>Role:</strong> ${loginInfo.role}</p>` : ""}
+        <p style="margin: 0 0 8px; font-size: 13px;"><strong>Authentication Method:</strong> ${loginInfo.eventType}</p>
+        ${loginInfo.ipAddress ? `<p style="margin: 0 0 8px; font-size: 13px;"><strong>IP Address:</strong> ${loginInfo.ipAddress}</p>` : ""}
+        <p style="margin: 0; font-size: 12px; color: #64748b;"><strong>Timestamp:</strong> ${timeStr} IST</p>
+      </div>
+    `,
+    { text: "View Admin Operations Center", url: adminDashboardUrl }
+  );
+
+  return dispatchEmail({
+    to: adminEmail,
+    subject: `[Admin Login Activity] ${loginInfo.email} (${loginInfo.eventType})`,
+    html,
+    event: "ADMIN_USER_LOGIN_ACTIVITY",
+  });
+}

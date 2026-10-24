@@ -10,7 +10,8 @@ import {
   LocationItem,
   ContentBannerItem,
   PaymentRecordItem,
-  UserRole
+  UserRole,
+  LoginActivityItem
 } from "@/types";
 import { INITIAL_SEED_PROPERTIES, INITIAL_PACKAGES } from "./seed-data";
 import { normalizeAreaToSqft, POPULAR_LOCATIONS } from "./constants";
@@ -28,6 +29,7 @@ declare global {
   var __landora_locations: LocationItem[] | undefined;
   var __landora_content: ContentBannerItem[] | undefined;
   var __landora_payments: PaymentRecordItem[] | undefined;
+  var __landora_login_activities: LoginActivityItem[] | undefined;
 }
 
 // Ensure in-memory store always has latest seed dataset
@@ -695,6 +697,14 @@ export const UserStore = {
     user.isSuspended = isSuspended;
     user.updatedAt = new Date().toISOString();
     return user;
+  },
+
+  recordLogin(id: string): UserItem | null {
+    const user = this.findById(id);
+    if (!user) return null;
+    user.lastLoginAt = new Date().toISOString();
+    user.updatedAt = new Date().toISOString();
+    return user;
   }
 };
 
@@ -908,5 +918,27 @@ export const NotificationStore = {
     };
     globalThis.__landora_notifications = [newNotif, ...(globalThis.__landora_notifications || [])];
     return newNotif;
+  }
+};
+
+export const LoginActivityStore = {
+  create(data: Omit<LoginActivityItem, "id" | "createdAt">): LoginActivityItem {
+    const item: LoginActivityItem = {
+      ...data,
+      id: `act-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString(),
+    };
+    globalThis.__landora_login_activities = [item, ...(globalThis.__landora_login_activities || [])];
+    return item;
+  },
+
+  getAll(limit = 100): LoginActivityItem[] {
+    const list = globalThis.__landora_login_activities || [];
+    return list.slice(0, limit);
+  },
+
+  getByUser(userId: string): LoginActivityItem[] {
+    const list = globalThis.__landora_login_activities || [];
+    return list.filter(a => a.userId === userId);
   }
 };

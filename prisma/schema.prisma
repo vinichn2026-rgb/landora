@@ -109,6 +109,8 @@ model User {
   reportsSubmitted  PropertyReport[]
   notifications     Notification[]
   auditLogs         AuditLog[]
+  loginActivities   LoginActivity[]
+  lastLoginAt       DateTime?
 
   @@index([role])
 }
@@ -428,5 +430,27 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([userId])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// USER LOGIN & MONITORING ACTIVITY
+// -----------------------------------------------------------------------------
+model LoginActivity {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  userName  String?
+  role      String?
+  eventType String   // LOGIN_OTP, LOGIN_PASSWORD, REGISTER_INITIAL
+  status    String   @default("SUCCESS")
+  ipAddress String?
+  userAgent String?
+  details   String?  // e.g. "Signed in via Email OTP"
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([email])
   @@index([createdAt])
 }

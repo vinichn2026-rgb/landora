@@ -159,6 +159,7 @@ export interface UserItem {
   passwordHash?: string | null;
   role: UserRole;
   isSuspended?: boolean;
+  lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
   profile?: {
@@ -173,6 +174,20 @@ export interface UserItem {
     isPhoneVerified?: boolean;
     isEmailVerified?: boolean;
   } | null;
+}
+
+export interface LoginActivityItem {
+  id: string;
+  userId?: string | null;
+  userName?: string | null;
+  email: string;
+  role?: string | null;
+  eventType: string; // "LOGIN_OTP" | "LOGIN_PASSWORD" | "REGISTER_INITIAL"
+  status: "SUCCESS" | "FAILED";
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  details?: string | null;
+  createdAt: string;
 }
 
 export interface LocationItem {

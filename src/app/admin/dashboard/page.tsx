@@ -15,32 +15,39 @@ import {
   RefreshCw,
   ExternalLink,
   ShieldAlert,
-  History
+  History,
+  KeyRound,
+  LogIn,
+  Laptop
 } from "lucide-react";
-import { PropertyItem } from "@/types";
+import { PropertyItem, LoginActivityItem } from "@/types";
 
 export default function AdminDashboardOverviewPage() {
   const [metrics, setMetrics] = useState<any>(null);
   const [pendingProperties, setPendingProperties] = useState<PropertyItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loginActivities, setLoginActivities] = useState<LoginActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchOverviewData = async () => {
     setIsLoading(true);
     try {
-      const [resMetrics, resPending, resLogs] = await Promise.all([
+      const [resMetrics, resPending, resLogs, resLogins] = await Promise.all([
         fetch("/api/admin/metrics"),
         fetch("/api/admin/properties?status=PENDING&limit=5"),
         fetch("/api/admin/audit-logs"),
+        fetch("/api/admin/login-activity?limit=6"),
       ]);
 
       const dataMetrics = await resMetrics.json();
       const dataPending = await resPending.json();
       const dataLogs = await resLogs.json();
+      const dataLogins = await resLogins.json();
 
       if (dataMetrics.success) setMetrics(dataMetrics.metrics);
       if (dataPending.success) setPendingProperties(dataPending.data || []);
       if (dataLogs.success) setAuditLogs(dataLogs.logs?.slice(0, 5) || []);
+      if (dataLogins.success) setLoginActivities(dataLogins.activities || []);
     } catch (err) {
       console.error("Failed to load admin overview:", err);
     } finally {
@@ -300,6 +307,120 @@ export default function AdminDashboardOverviewPage() {
           )}
         </div>
 
+      </div>
+
+      {/* User Monitoring & Login Activity Section */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-emerald-50 text-[#0c4a3e]">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">User Login Activity & Authentication Logs</h2>
+              <p className="text-[11px] text-slate-500">
+                Server-recorded successful user logins, authentication methods, timestamps, and account roles in PostgreSQL.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/admin/users"
+            className="text-xs font-bold text-[#0c4a3e] hover:underline flex items-center gap-1 shrink-0 self-start sm:self-auto"
+          >
+            <span>View All Accounts & Logins</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {isLoading ? (
+          <div className="p-8 text-center text-xs text-slate-400">Loading user login activity...</div>
+        ) : loginActivities.length === 0 ? (
+          <div className="p-8 text-center text-xs text-slate-400">
+            No login events recorded yet. Logins via Email OTP or Password will appear here in real-time.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100 uppercase text-[10px]">
+                <tr>
+                  <th className="p-3.5">User / Account</th>
+                  <th className="p-3.5">Assigned Role</th>
+                  <th className="p-3.5">Method</th>
+                  <th className="p-3.5">Client IP & Device</th>
+                  <th className="p-3.5">Timestamp</th>
+                  <th className="p-3.5 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {loginActivities.map(a => (
+                  <tr key={a.id} className="hover:bg-slate-50/60 transition">
+                    <td className="p-3.5 whitespace-nowrap">
+                      <div className="font-bold text-slate-900">{a.userName || a.email.split("@")[0]}</div>
+                      <div className="text-[11px] text-slate-500 font-mono">{a.email}</div>
+                    </td>
+
+                    <td className="p-3.5 whitespace-nowrap">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        a.role === "ADMIN"
+                          ? "bg-purple-100 text-purple-800"
+                          : a.role === "SELLER"
+                          ? "bg-emerald-100 text-[#0c4a3e]"
+                          : a.role === "AGENT"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-slate-100 text-slate-700"
+                      }`}>
+                        {a.role || "BUYER"}
+                      </span>
+                    </td>
+
+                    <td className="p-3.5 whitespace-nowrap">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        a.eventType === "LOGIN_OTP"
+                          ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                          : a.eventType === "REGISTER_INITIAL"
+                          ? "bg-purple-50 text-purple-800 border border-purple-200"
+                          : "bg-blue-50 text-blue-800 border border-blue-200"
+                      }`}>
+                        {a.eventType === "LOGIN_OTP"
+                          ? "Email OTP"
+                          : a.eventType === "REGISTER_INITIAL"
+                          ? "New Account Registered"
+                          : "Password Login"}
+                      </span>
+                      {a.details && (
+                        <div className="text-[10px] text-slate-400 mt-0.5">{a.details}</div>
+                      )}
+                    </td>
+
+                    <td className="p-3.5 whitespace-nowrap text-slate-500 font-mono text-[11px]">
+                      <div>{a.ipAddress || "127.0.0.1"}</div>
+                      {a.userAgent && (
+                        <div className="text-[9.5px] text-slate-400 truncate max-w-xs">{a.userAgent}</div>
+                      )}
+                    </td>
+
+                    <td className="p-3.5 whitespace-nowrap text-slate-600">
+                      {new Date(a.createdAt).toLocaleString("en-IN", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+
+                    <td className="p-3.5 text-right whitespace-nowrap">
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>SUCCESS</span>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
     </div>

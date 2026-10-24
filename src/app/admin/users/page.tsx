@@ -14,13 +14,18 @@ import {
   Edit,
   Mail,
   Phone,
-  Clock
+  Clock,
+  KeyRound,
+  LogIn,
+  Laptop
 } from "lucide-react";
-import { UserItem, UserRole } from "@/types";
+import { UserItem, UserRole, LoginActivityItem } from "@/types";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
+  const [loginActivities, setLoginActivities] = useState<LoginActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [viewTab, setViewTab] = useState<"users" | "logins">("users");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -37,13 +42,22 @@ export default function AdminUsersPage() {
       if (roleFilter !== "ALL") params.append("role", roleFilter);
       if (searchQuery.trim()) params.append("query", searchQuery.trim());
 
-      const res = await fetch(`/api/admin/users?${params.toString()}`);
-      const data = await res.json();
-      if (data.success) {
-        setUsers(data.users);
+      const [resUsers, resLogins] = await Promise.all([
+        fetch(`/api/admin/users?${params.toString()}`),
+        fetch("/api/admin/login-activity?limit=100")
+      ]);
+
+      const dataUsers = await resUsers.json();
+      const dataLogins = await resLogins.json();
+
+      if (dataUsers.success) {
+        setUsers(dataUsers.users);
+      }
+      if (dataLogins.success) {
+        setLoginActivities(dataLogins.activities || []);
       }
     } catch (err) {
-      console.error("Failed to load admin users:", err);
+      console.error("Failed to load admin users & login activity:", err);
     } finally {
       setIsLoading(false);
     }
@@ -160,146 +174,288 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* Search & Filters */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {[
-            { id: "ALL", label: "All Users" },
-            { id: "BUYER", label: "Buyers" },
-            { id: "SELLER", label: "Sellers" },
-            { id: "AGENT", label: "Agents" },
-            { id: "BUILDER", label: "Builders" },
-            { id: "ADMIN", label: "Admins" },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setRoleFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                roleFilter === tab.id
-                  ? "bg-[#0c4a3e] text-white shadow-2xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      {/* Top View Toggle Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setViewTab("users")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+            viewTab === "users"
+              ? "bg-[#0c4a3e] text-white shadow-xs"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Registered Accounts ({users.length})</span>
+        </button>
 
-        <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search name, email, phone..."
-            className="w-full pl-9 pr-3.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:border-[#0c4a3e]"
-          />
-        </form>
+        <button
+          onClick={() => setViewTab("logins")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+            viewTab === "logins"
+              ? "bg-[#0c4a3e] text-white shadow-xs"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          <KeyRound className="w-4 h-4" />
+          <span>Recent Login History ({loginActivities.length})</span>
+        </button>
       </div>
 
-      {/* Users Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <span>Total registered: <strong>{users.length}</strong> accounts</span>
-        </div>
+      {viewTab === "users" ? (
+        <>
+          {/* Search & Filters */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: "ALL", label: "All Users" },
+                { id: "BUYER", label: "Buyers" },
+                { id: "SELLER", label: "Sellers" },
+                { id: "AGENT", label: "Agents" },
+                { id: "BUILDER", label: "Builders" },
+                { id: "ADMIN", label: "Admins" },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setRoleFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    roleFilter === tab.id
+                      ? "bg-[#0c4a3e] text-white shadow-2xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-        {isLoading ? (
-          <div className="p-12 text-center text-xs text-slate-400">Loading user accounts...</div>
-        ) : users.length === 0 ? (
-          <div className="p-12 text-center text-xs text-slate-400">No users found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100 uppercase text-[10px]">
-                <tr>
-                  <th className="p-3.5">User Profile</th>
-                  <th className="p-3.5">Contact Details</th>
-                  <th className="p-3.5">Assigned Role</th>
-                  <th className="p-3.5">Account Status</th>
-                  <th className="p-3.5">Joined Date</th>
-                  <th className="p-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {users.map(u => (
-                  <tr key={u.id} className="hover:bg-slate-50/60 transition">
-                    <td className="p-3.5 whitespace-nowrap">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-[#0c4a3e]/10 text-[#0c4a3e] font-bold text-xs flex items-center justify-center border border-[#0c4a3e]/20">
-                          {u.name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="font-bold text-slate-900">{u.name}</div>
-                          <div className="text-[10px] text-slate-400">ID: {u.id}</div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="p-3.5 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 text-slate-600">
-                        <Mail className="w-3 h-3 text-slate-400" />
-                        <span>{u.email}</span>
-                      </div>
-                      {u.phoneNumber && (
-                        <div className="flex items-center gap-1.5 text-slate-400 text-[10px] mt-0.5">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          <span>{u.phoneNumber}</span>
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="p-3.5 whitespace-nowrap">
-                      {getRoleBadge(u.role)}
-                    </td>
-
-                    <td className="p-3.5 whitespace-nowrap">
-                      {u.isSuspended ? (
-                        <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
-                          <XCircle className="w-3 h-3" /> Suspended
-                        </span>
-                      ) : (
-                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
-                          <CheckCircle2 className="w-3 h-3" /> Active
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="p-3.5 whitespace-nowrap text-slate-500">
-                      {new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                    </td>
-
-                    <td className="p-3.5 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => {
-                            setEditingRoleUser(u);
-                            setSelectedRole(u.role);
-                          }}
-                          className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[11px] flex items-center gap-1"
-                        >
-                          <Edit className="w-3 h-3 text-slate-500" />
-                          <span>Role</span>
-                        </button>
-
-                        <button
-                          onClick={() => handleToggleSuspension(u.id, Boolean(u.isSuspended))}
-                          className={`px-2.5 py-1 rounded-lg border font-bold text-[11px] transition ${
-                            u.isSuspended
-                              ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-                              : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                          }`}
-                        >
-                          {u.isSuspended ? "Reactivate" : "Suspend"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search name, email, phone..."
+                className="w-full pl-9 pr-3.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:border-[#0c4a3e]"
+              />
+            </form>
           </div>
-        )}
-      </div>
+
+          {/* Users Table */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>Total registered: <strong>{users.length}</strong> accounts</span>
+            </div>
+
+            {isLoading ? (
+              <div className="p-12 text-center text-xs text-slate-400">Loading user accounts...</div>
+            ) : users.length === 0 ? (
+              <div className="p-12 text-center text-xs text-slate-400">No users found.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3.5">User Profile</th>
+                      <th className="p-3.5">Contact Details</th>
+                      <th className="p-3.5">Assigned Role</th>
+                      <th className="p-3.5">Account Status</th>
+                      <th className="p-3.5">Last Login</th>
+                      <th className="p-3.5">Joined Date</th>
+                      <th className="p-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {users.map(u => (
+                      <tr key={u.id} className="hover:bg-slate-50/60 transition">
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-[#0c4a3e]/10 text-[#0c4a3e] font-bold text-xs flex items-center justify-center border border-[#0c4a3e]/20">
+                              {u.name.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-900">{u.name}</div>
+                              <div className="text-[10px] text-slate-400">ID: {u.id}</div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 text-slate-600">
+                            <Mail className="w-3 h-3 text-slate-400" />
+                            <span>{u.email}</span>
+                          </div>
+                          {u.phoneNumber && (
+                            <div className="flex items-center gap-1.5 text-slate-400 text-[10px] mt-0.5">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              <span>{u.phoneNumber}</span>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="p-3.5 whitespace-nowrap">
+                          {getRoleBadge(u.role)}
+                        </td>
+
+                        <td className="p-3.5 whitespace-nowrap">
+                          {u.isSuspended ? (
+                            <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                              <XCircle className="w-3 h-3" /> Suspended
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                              <CheckCircle2 className="w-3 h-3" /> Active
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="p-3.5 whitespace-nowrap">
+                          {u.lastLoginAt ? (
+                            <div className="flex items-center gap-1 text-emerald-800 font-semibold text-[11px]">
+                              <Clock className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span>
+                                {new Date(u.lastLoginAt).toLocaleDateString("en-IN", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic">No login recorded</span>
+                          )}
+                        </td>
+
+                        <td className="p-3.5 whitespace-nowrap text-slate-500">
+                          {new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        </td>
+
+                        <td className="p-3.5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                setEditingRoleUser(u);
+                                setSelectedRole(u.role);
+                              }}
+                              className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                            >
+                              <Edit className="w-3 h-3 text-slate-500" />
+                              <span>Role</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleSuspension(u.id, Boolean(u.isSuspended))}
+                              className={`px-2.5 py-1 rounded-lg border font-bold text-[11px] transition cursor-pointer ${
+                                u.isSuspended
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                                  : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                              }`}
+                            >
+                              {u.isSuspended ? "Reactivate" : "Suspend"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        /* Login Activity Tab View */
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-[#0c4a3e]" />
+              <span className="font-bold text-slate-900">Recorded Successful Login Events</span>
+              <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[10px]">
+                {loginActivities.length} Events
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-400">Persisted in PostgreSQL database</span>
+          </div>
+
+          {isLoading ? (
+            <div className="p-12 text-center text-xs text-slate-400">Loading login history...</div>
+          ) : loginActivities.length === 0 ? (
+            <div className="p-12 text-center text-xs text-slate-400">No login events recorded yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100 uppercase text-[10px]">
+                  <tr>
+                    <th className="p-3.5">Account / User</th>
+                    <th className="p-3.5">Role</th>
+                    <th className="p-3.5">Auth Method</th>
+                    <th className="p-3.5">Client IP & Device</th>
+                    <th className="p-3.5">Timestamp</th>
+                    <th className="p-3.5 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {loginActivities.map(a => (
+                    <tr key={a.id} className="hover:bg-slate-50/60 transition">
+                      <td className="p-3.5 whitespace-nowrap">
+                        <div className="font-bold text-slate-900">{a.userName || a.email.split("@")[0]}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">{a.email}</div>
+                      </td>
+
+                      <td className="p-3.5 whitespace-nowrap">
+                        {getRoleBadge((a.role as UserRole) || "BUYER")}
+                      </td>
+
+                      <td className="p-3.5 whitespace-nowrap">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          a.eventType === "LOGIN_OTP"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : a.eventType === "REGISTER_INITIAL"
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-blue-100 text-blue-800"
+                        }`}>
+                          {a.eventType === "LOGIN_OTP"
+                            ? "Email OTP"
+                            : a.eventType === "REGISTER_INITIAL"
+                            ? "New Account Registered"
+                            : "Password Login"}
+                        </span>
+                        {a.details && (
+                          <div className="text-[10px] text-slate-400 mt-0.5">{a.details}</div>
+                        )}
+                      </td>
+
+                      <td className="p-3.5 whitespace-nowrap text-slate-500 font-mono text-[11px]">
+                        <div>{a.ipAddress || "127.0.0.1"}</div>
+                        {a.userAgent && (
+                          <div className="text-[9.5px] text-slate-400 truncate max-w-xs">{a.userAgent}</div>
+                        )}
+                      </td>
+
+                      <td className="p-3.5 whitespace-nowrap text-slate-600">
+                        {new Date(a.createdAt).toLocaleString("en-IN", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+
+                      <td className="p-3.5 text-right whitespace-nowrap">
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>SUCCESS</span>
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Role Management Modal */}
       {editingRoleUser && (

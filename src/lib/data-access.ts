@@ -19,7 +19,8 @@ import {
   ContentBannerItem,
   PaymentRecordItem,
   ListingPackageItem,
-  PropertyReportItem
+  PropertyReportItem,
+  LoginActivityItem
 } from "@/types";
 import { 
   PropertyStore, 
@@ -32,14 +33,16 @@ import {
   AuditStore,
   LocationStore,
   ContentStore,
-  PaymentStore
+  PaymentStore,
+  LoginActivityStore
 } from "./store";
 import { normalizeAreaToSqft } from "./constants";
 import { 
   sendListingModerationEmail, 
   sendNewEnquiryEmail, 
   sendEnquiryConfirmationEmail,
-  sendListingExpiryReminderEmail
+  sendListingExpiryReminderEmail,
+  sendAdminUserLoginNotificationEmail
 } from "./email";
 
 export interface PaginatedResult<T> {
@@ -1447,16 +1450,18 @@ export const DataAccess = {
           email: u.email,
           phoneNumber: u.phoneNumber,
           role: u.role as UserRole,
+          lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
           createdAt: u.createdAt.toISOString(),
           updatedAt: u.updatedAt.toISOString(),
           profile: u.profile,
+          passwordHash: undefined,
         }));
       } catch (err) {
         console.warn("[DATA-ACCESS WARNING] PostgreSQL getAdminUsers error:", err);
       }
     }
 
-    let list = UserStore.getAll();
+    let list = UserStore.getAll().map(u => ({ ...u, passwordHash: undefined }));
     if (filters?.role && filters.role !== "ALL" && filters.role !== "all") {
       list = list.filter(u => u.role === filters.role!.toUpperCase());
     }
@@ -1597,6 +1602,140 @@ export const DataAccess = {
 
   async getAdminAuditLogs() {
     return AuditStore.getAll();
+  },
+
+  // ---------------------------------------------------------------------------
+  // User Login Monitoring & Activity
+  // ---------------------------------------------------------------------------
+  async recordSuccessfulLogin(params: {
+    userId?: string | null;
+    email: string;
+    userName?: string | null;
+    role?: string | null;
+    eventType: string; // "LOGIN_OTP" | "LOGIN_PASSWORD" | "REGISTER_INITIAL"
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    details?: string | null;
+  }): Promise<LoginActivityItem> {
+    const timestamp = new Date().toISOString();
+    let recordedActivity: LoginActivityItem | null = null;
+
+    // 1. PostgreSQL Persistence via Prisma
+    if (process.env.DATABASE_URL) {
+      try {
+        const prismaActivity = await prisma.loginActivity.create({
+          data: {
+            userId: params.userId || undefined,
+            email: params.email.toLowerCase().trim(),
+            userName: params.userName || undefined,
+            role: params.role || undefined,
+            eventType: params.eventType,
+            status: "SUCCESS",
+            ipAddress: params.ipAddress || undefined,
+            userAgent: params.userAgent ? params.userAgent.slice(0, 255) : undefined,
+            details: params.details || undefined,
+          },
+        });
+
+        // Update user's lastLoginAt timestamp in database
+        if (params.userId) {
+          await prisma.user.update({
+            where: { id: params.userId },
+            data: { lastLoginAt: new Date() },
+          }).catch(() => {});
+        }
+
+        recordedActivity = {
+          id: prismaActivity.id,
+          userId: prismaActivity.userId,
+          userName: prismaActivity.userName,
+          email: prismaActivity.email,
+          role: prismaActivity.role,
+          eventType: prismaActivity.eventType,
+          status: "SUCCESS",
+          ipAddress: prismaActivity.ipAddress,
+          userAgent: prismaActivity.userAgent,
+          details: prismaActivity.details,
+          createdAt: prismaActivity.createdAt.toISOString(),
+        };
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL recordSuccessfulLogin error:", err);
+      }
+    }
+
+    // 2. In-Memory Store Persistence (Offline & Local Resilience)
+    if (!recordedActivity) {
+      recordedActivity = LoginActivityStore.create({
+        userId: params.userId,
+        userName: params.userName,
+        email: params.email.toLowerCase().trim(),
+        role: params.role,
+        eventType: params.eventType,
+        status: "SUCCESS",
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent ? params.userAgent.slice(0, 255) : undefined,
+        details: params.details,
+      });
+    }
+
+    // Update in-memory user lastLoginAt
+    if (params.userId) {
+      UserStore.recordLogin(params.userId);
+    }
+
+    // 3. System Audit Trail Logging
+    AuditStore.log(
+      params.eventType,
+      "USER",
+      params.userId || params.email,
+      `User ${params.email} successfully logged in via ${params.eventType}.`,
+      params.userName || params.email
+    );
+
+    // 4. Optional & Configurable Administrator Notification on Login
+    // Controlled by NOTIFY_ADMIN_ON_LOGIN env variable (default is false)
+    if (process.env.NOTIFY_ADMIN_ON_LOGIN === "true") {
+      const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || "vinichn2026@gmail.com").toLowerCase().trim();
+      sendAdminUserLoginNotificationEmail(adminEmail, {
+        email: params.email,
+        userName: params.userName || undefined,
+        role: params.role || undefined,
+        eventType: params.eventType,
+        ipAddress: params.ipAddress,
+        timestamp,
+      }).catch(err => console.error("[DATA-ACCESS] sendAdminUserLoginNotificationEmail error:", err));
+    }
+
+    return recordedActivity;
+  },
+
+  async getAdminLoginActivities(limit = 50): Promise<LoginActivityItem[]> {
+    if (process.env.DATABASE_URL) {
+      try {
+        const records = await prisma.loginActivity.findMany({
+          take: limit,
+          orderBy: { createdAt: "desc" },
+        });
+
+        return records.map((r: any) => ({
+          id: r.id,
+          userId: r.userId,
+          userName: r.userName,
+          email: r.email,
+          role: r.role,
+          eventType: r.eventType,
+          status: "SUCCESS" as const,
+          ipAddress: r.ipAddress,
+          userAgent: r.userAgent,
+          details: r.details,
+          createdAt: r.createdAt.toISOString(),
+        }));
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getAdminLoginActivities error:", err);
+      }
+    }
+
+    return LoginActivityStore.getAll(limit);
   },
 
   async getAllEnquiriesPlatform() {

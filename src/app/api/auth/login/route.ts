@@ -49,6 +49,21 @@ export async function POST(request: NextRequest) {
 
     await setServerSessionCookie(sessionToken);
 
+    // Record Successful User Login Activity on the Server
+    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "127.0.0.1";
+    const userAgent = request.headers.get("user-agent") || undefined;
+
+    await DataAccess.recordSuccessfulLogin({
+      userId: user.id,
+      email: user.email,
+      userName: user.name,
+      role: user.role,
+      eventType: "LOGIN_PASSWORD",
+      ipAddress,
+      userAgent,
+      details: "Signed in via password authentication",
+    });
+
     return NextResponse.json({
       success: true,
       user: {

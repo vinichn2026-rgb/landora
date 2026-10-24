@@ -5,6 +5,7 @@ import { signSessionToken, setServerSessionCookie } from "@/lib/auth";
 import { applyRateLimit } from "@/lib/rate-limit";
 import { INITIAL_ADMIN_EMAIL } from "@/lib/constants";
 import { UserRole } from "@/types";
+import { sendAdminNewUserRegistrationEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,12 +40,14 @@ export async function POST(request: NextRequest) {
 
     // 4. Authenticate or Provision User Account
     const isInitialAdmin = email === INITIAL_ADMIN_EMAIL.toLowerCase().trim();
+    let isNewUser = false;
     let user = await DataAccess.findUserByEmail(email);
 
     if (!user) {
       if (isInitialAdmin) {
         user = await DataAccess.ensureInitialAdminUser();
       } else {
+        isNewUser = true;
         // Automatically provision registered public user with default role BUYER
         const displayName = email.split("@")[0].replace(/[^a-zA-Z0-9]/g, " ").trim();
         user = await DataAccess.createUser({
@@ -53,6 +56,30 @@ export async function POST(request: NextRequest) {
           role: "BUYER",
           city: "Coimbatore",
         });
+
+        // Send email alert to administrator for new user registration
+        const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || INITIAL_ADMIN_EMAIL).toLowerCase().trim();
+        sendAdminNewUserRegistrationEmail(adminEmail, {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          city: "Coimbatore",
+        }).catch(err => console.error("[AUTH] sendAdminNewUserRegistrationEmail error:", err));
+
+        // Create in-app notification for administrator
+        const adminUser = await DataAccess.findUserByEmail(adminEmail);
+        if (adminUser) {
+          DataAccess.createNotification({
+            userId: adminUser.id,
+            title: `New User Registered: ${user.name}`,
+            message: `${user.name} (${user.email}) registered as BUYER via email OTP verification.`,
+            type: "ADMIN_NEW_USER",
+            link: "/admin/users",
+            entityType: "USER",
+            entityId: user.id,
+          }).catch(() => {});
+        }
       }
     } else if (isInitialAdmin && user.role !== "ADMIN") {
       // Ensure initial admin email is strictly updated to ADMIN role
@@ -74,6 +101,21 @@ export async function POST(request: NextRequest) {
 
     // 6. Set HTTP-Only Secure Cookie
     await setServerSessionCookie(sessionToken);
+
+    // 7. Record Successful User Login Activity on the Server
+    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "127.0.0.1";
+    const userAgent = request.headers.get("user-agent") || undefined;
+
+    await DataAccess.recordSuccessfulLogin({
+      userId: user.id,
+      email: user.email,
+      userName: user.name,
+      role: userRole,
+      eventType: isNewUser ? "REGISTER_INITIAL" : "LOGIN_OTP",
+      ipAddress,
+      userAgent,
+      details: isNewUser ? "New account created & verified via OTP" : "Verified single-use email OTP",
+    });
 
     // 7. Route redirection target based on role
     let defaultRedirect = "/dashboard";
