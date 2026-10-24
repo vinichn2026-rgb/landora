@@ -19,9 +19,18 @@ export interface EmailDispatchResult {
   messageId?: string;
 }
 
+export function getResendApiKey(): string | null {
+  const envVal = process.env.RESEND_API_KEY;
+  if (!envVal) return null;
+  const match = envVal.match(/re_[A-Za-z0-9_]{15,}/);
+  if (match && !match[0].includes("your_api_key")) {
+    return match[0];
+  }
+  return null;
+}
+
 export const isEmailProviderConfigured = (): boolean => {
-  const rawResend = process.env.RESEND_API_KEY?.trim().replace(/^["']|["']$/g, "");
-  const hasResend = Boolean(rawResend && rawResend.startsWith("re_") && rawResend.length > 10 && !rawResend.includes("your_api_key"));
+  const hasResend = Boolean(getResendApiKey());
   const hasSmtp = Boolean(
     process.env.SMTP_HOST && 
     process.env.SMTP_USER && 
@@ -127,15 +136,15 @@ async function dispatchEmail(params: {
     };
   }
 
-  // If Resend API Key is provided
-  const rawResendKey = process.env.RESEND_API_KEY?.trim().replace(/^["']|["']$/g, "");
-  if (rawResendKey) {
+  // If Resend API Key is available
+  const resendKey = getResendApiKey();
+  if (resendKey) {
     try {
       const fromEmail = (process.env.EMAIL_FROM || "Landora <onboarding@resend.dev>").trim().replace(/^["']|["']$/g, "");
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${rawResendKey}`,
+          "Authorization": `Bearer ${resendKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -165,6 +174,10 @@ async function dispatchEmail(params: {
             cleanMsg = parsed.message;
           }
         } catch {}
+
+        if (response.status === 403 && cleanMsg.includes("only send testing emails")) {
+          cleanMsg = "Resend Sandbox Mode: Verification emails can currently only be sent to the registered owner (vinichn2026@gmail.com). To send to other addresses, verify your domain at resend.com/domains.";
+        }
 
         return {
           success: false,
