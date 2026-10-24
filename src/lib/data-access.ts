@@ -4,9 +4,43 @@
 // =============================================================================
 
 import prisma from "./prisma";
-import { PropertyItem, SearchFilters, PropertyStatus, VerificationLevel, ListingType, PropertyCategoryType, UserItem, NotificationItem, UserRole } from "@/types";
-import { PropertyStore, EnquiryStore, ReportStore, SavedPropertyStore, UserStore, NotificationStore } from "./store";
+import { 
+  PropertyItem, 
+  SearchFilters, 
+  PropertyStatus, 
+  VerificationLevel, 
+  ListingType, 
+  PropertyCategoryType, 
+  UserItem, 
+  NotificationItem, 
+  UserRole,
+  AuditLogItem,
+  LocationItem,
+  ContentBannerItem,
+  PaymentRecordItem,
+  ListingPackageItem,
+  PropertyReportItem
+} from "@/types";
+import { 
+  PropertyStore, 
+  EnquiryStore, 
+  ReportStore, 
+  SavedPropertyStore, 
+  UserStore, 
+  NotificationStore,
+  PackageStore,
+  AuditStore,
+  LocationStore,
+  ContentStore,
+  PaymentStore
+} from "./store";
 import { normalizeAreaToSqft } from "./constants";
+import { 
+  sendListingModerationEmail, 
+  sendNewEnquiryEmail, 
+  sendEnquiryConfirmationEmail,
+  sendListingExpiryReminderEmail
+} from "./email";
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -258,6 +292,35 @@ export const DataAccess = {
             },
           });
 
+          // Trigger notifications and emails
+          await this.createNotification({
+            userId: prop.ownerId,
+            title: `New Lead: ${data.buyerName}`,
+            message: `${data.buyerName} enquired about "${prop.title}". Mobile: ${data.buyerPhone}`,
+            type: "NEW_ENQUIRY",
+            link: "/dashboard/seller/enquiries",
+            entityType: "ENQUIRY",
+            entityId: enq.id,
+          });
+
+          await sendNewEnquiryEmail(
+            "seller@landora.in",
+            "Property Owner",
+            prop.title,
+            data.buyerName,
+            data.buyerPhone,
+            data.buyerEmail,
+            data.message,
+            enq.id
+          );
+
+          await sendEnquiryConfirmationEmail(
+            data.buyerEmail,
+            data.buyerName,
+            prop.title,
+            "Property Owner"
+          );
+
           return { success: true, enquiryId: enq.id };
         }
       } catch (err) {
@@ -266,6 +329,39 @@ export const DataAccess = {
     }
 
     const inMem = EnquiryStore.create(data as any);
+    if (inMem.success && inMem.enquiry) {
+      const property = await this.getPropertyById(data.propertyId);
+      const propTitle = property?.title || "Property Listing";
+
+      await this.createNotification({
+        userId: data.sellerId || property?.sellerId || "user-seller-01",
+        title: `New Lead: ${data.buyerName}`,
+        message: `${data.buyerName} enquired about "${propTitle}". Mobile: ${data.buyerPhone}`,
+        type: "NEW_ENQUIRY",
+        link: "/dashboard/seller/enquiries",
+        entityType: "ENQUIRY",
+        entityId: inMem.enquiry.id,
+      });
+
+      await sendNewEnquiryEmail(
+        property?.sellerEmail || "seller@landora.in",
+        property?.sellerName || "Property Owner",
+        propTitle,
+        data.buyerName,
+        data.buyerPhone,
+        data.buyerEmail,
+        data.message,
+        inMem.enquiry.id
+      );
+
+      await sendEnquiryConfirmationEmail(
+        data.buyerEmail,
+        data.buyerName,
+        propTitle,
+        property?.sellerName || "Property Owner"
+      );
+    }
+
     return {
       success: inMem.success,
       enquiryId: inMem.enquiry?.id,
@@ -978,6 +1074,658 @@ export const DataAccess = {
       updated.sellerReply = reply;
       updated.repliedAt = new Date().toISOString();
     }
+    return updated;
+  },
+
+  // ---------------------------------------------------------------------------
+  // Administrator Operations & Dashboard
+  // ---------------------------------------------------------------------------
+  async getAdminMetrics() {
+    let totalUsers = 0;
+    let activeListings = 0;
+    let pendingApprovals = 0;
+    let rejectedListings = 0;
+    let reportedListings = 0;
+    let recentEnquiries = 0;
+
+    if (process.env.DATABASE_URL) {
+      try {
+        [
+          totalUsers,
+          activeListings,
+          pendingApprovals,
+          rejectedListings,
+          reportedListings,
+          recentEnquiries,
+        ] = await Promise.all([
+          prisma.user.count(),
+          prisma.property.count({ where: { status: "ACTIVE" } }),
+          prisma.property.count({ where: { status: "PENDING" } }),
+          prisma.property.count({ where: { status: "REJECTED" } }),
+          prisma.propertyReport.count(),
+          prisma.enquiry.count(),
+        ]);
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getAdminMetrics error:", err);
+      }
+    }
+
+    if (!totalUsers) {
+      const allProps = globalThis.__landora_properties || [];
+      totalUsers = (globalThis.__landora_users || []).length;
+      activeListings = allProps.filter(p => !p.status || p.status === "ACTIVE").length;
+      pendingApprovals = allProps.filter(p => p.status === "PENDING").length;
+      rejectedListings = allProps.filter(p => p.status === "REJECTED").length;
+      reportedListings = (globalThis.__landora_reports || []).length;
+      recentEnquiries = (globalThis.__landora_enquiries || []).length;
+    }
+
+    const paymentMetrics = PaymentStore.getMetrics();
+
+    return {
+      totalUsers,
+      activeListings,
+      pendingApprovals,
+      rejectedListings,
+      reportedListings,
+      recentEnquiries,
+      paymentMetrics,
+    };
+  },
+
+  async getAdminProperties(filters?: { status?: string; query?: string; city?: string; page?: number; limit?: number }) {
+    if (process.env.DATABASE_URL) {
+      try {
+        const page = Math.max(1, filters?.page || 1);
+        const limit = Math.max(1, Math.min(100, filters?.limit || 20));
+        const skip = (page - 1) * limit;
+
+        const where: any = {};
+        if (filters?.status && filters.status !== "ALL" && filters.status !== "all") {
+          where.status = filters.status.toUpperCase();
+        }
+        if (filters?.city && filters.city !== "ALL" && filters.city !== "all") {
+          where.city = { contains: filters.city, mode: "insensitive" };
+        }
+        if (filters?.query) {
+          where.OR = [
+            { title: { contains: filters.query, mode: "insensitive" } },
+            { locality: { contains: filters.query, mode: "insensitive" } },
+            { city: { contains: filters.query, mode: "insensitive" } },
+            { id: { contains: filters.query, mode: "insensitive" } },
+          ];
+        }
+
+        const [records, total] = await Promise.all([
+          prisma.property.findMany({
+            where,
+            include: {
+              images: { orderBy: { order: "asc" } },
+              amenities: true,
+              owner: { select: { id: true, name: true, phoneNumber: true, email: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            skip,
+            take: limit,
+          }),
+          prisma.property.count({ where }),
+        ]);
+
+        return {
+          data: records.map(mapPrismaPropertyToItem),
+          total,
+          page,
+          totalPages: Math.ceil(total / limit) || 1,
+          limit,
+        };
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getAdminProperties error:", err);
+      }
+    }
+
+    const res = PropertyStore.getAllAdmin(filters);
+    return {
+      data: res.properties,
+      total: res.total,
+      page: res.page,
+      totalPages: res.totalPages,
+      limit: filters?.limit || 20,
+    };
+  },
+
+  async moderateProperty(propertyId: string, action: "APPROVE" | "REJECT" | "DEACTIVATE" | "EXPIRE", reason?: string, adminName = "Platform Administrator") {
+    const statusMap: Record<string, PropertyStatus> = {
+      APPROVE: "ACTIVE",
+      REJECT: "REJECTED",
+      DEACTIVATE: "DEACTIVATED",
+      EXPIRE: "EXPIRED",
+    };
+    const newStatus = statusMap[action];
+
+    let updated: PropertyItem | null = null;
+    if (process.env.DATABASE_URL) {
+      try {
+        const record = await prisma.property.update({
+          where: { id: propertyId },
+          data: {
+            status: newStatus as any,
+            ...(action === "APPROVE" ? { verificationStatus: "INFO_REVIEWED" } : {}),
+          },
+          include: {
+            images: { orderBy: { order: "asc" } },
+            amenities: true,
+            owner: { select: { id: true, name: true, phoneNumber: true, email: true } },
+          },
+        });
+        updated = mapPrismaPropertyToItem(record);
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL moderateProperty error:", err);
+      }
+    }
+
+    if (!updated) {
+      updated = PropertyStore.update(propertyId, { 
+        status: newStatus,
+        ...(reason ? { rejectionReason: reason } : {}),
+        ...(action === "APPROVE" ? { verificationStatus: "INFO_REVIEWED" } : {})
+      });
+    }
+
+    // Phase 9: In-app notification & Moderation Email to Seller
+    if (updated && (action === "APPROVE" || action === "REJECT")) {
+      const isApproved = action === "APPROVE";
+      await this.createNotification({
+        userId: updated.sellerId,
+        title: isApproved ? "Listing Approved & Live" : "Listing Review: Changes Needed",
+        message: isApproved
+          ? `Your property "${updated.title}" has been approved and is now live to buyers.`
+          : `Your listing "${updated.title}" was not approved: ${reason || "Documentation update needed."}`,
+        type: isApproved ? "LISTING_APPROVED" : "LISTING_REJECTED",
+        link: isApproved ? `/properties/${updated.slug}` : `/dashboard/seller/listings`,
+        entityType: "PROPERTY",
+        entityId: updated.id,
+      });
+
+      if (updated.sellerEmail) {
+        await sendListingModerationEmail(
+          updated.sellerEmail,
+          updated.sellerName,
+          updated.title,
+          isApproved ? "ACTIVE" : "REJECTED",
+          updated.slug,
+          reason
+        );
+      }
+    }
+
+    // Log to Audit Log
+    AuditStore.log(
+      `MODERATE_PROPERTY_${action}`,
+      "PROPERTY",
+      propertyId,
+      `Action: ${action}. New Status: ${newStatus}.${reason ? ` Reason: ${reason}` : ""}`,
+      adminName
+    );
+
+    return updated;
+  },
+
+  async togglePropertyFeatured(propertyId: string, isFeatured: boolean, adminName = "Platform Administrator") {
+    let updated: PropertyItem | null = null;
+    if (process.env.DATABASE_URL) {
+      try {
+        const record = await prisma.property.update({
+          where: { id: propertyId },
+          data: { isFeatured },
+          include: {
+            images: { orderBy: { order: "asc" } },
+            amenities: true,
+            owner: { select: { id: true, name: true, phoneNumber: true, email: true } },
+          },
+        });
+        updated = mapPrismaPropertyToItem(record);
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL togglePropertyFeatured error:", err);
+      }
+    }
+
+    if (!updated) {
+      updated = PropertyStore.update(propertyId, { isFeatured });
+    }
+
+    AuditStore.log(
+      isFeatured ? "FEATURE_PROPERTY" : "UNFEATURE_PROPERTY",
+      "PROPERTY",
+      propertyId,
+      `Set isFeatured to ${isFeatured}`,
+      adminName
+    );
+
+    return updated;
+  },
+
+  async getAdminUsers(filters?: { role?: string; query?: string }) {
+    if (process.env.DATABASE_URL) {
+      try {
+        const where: any = {};
+        if (filters?.role && filters.role !== "ALL" && filters.role !== "all") {
+          where.role = filters.role.toUpperCase();
+        }
+        if (filters?.query) {
+          where.OR = [
+            { name: { contains: filters.query, mode: "insensitive" } },
+            { email: { contains: filters.query, mode: "insensitive" } },
+            { phoneNumber: { contains: filters.query, mode: "insensitive" } },
+          ];
+        }
+
+        const users = await prisma.user.findMany({
+          where,
+          include: { profile: true },
+          orderBy: { createdAt: "desc" },
+        });
+
+        return users.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          phoneNumber: u.phoneNumber,
+          role: u.role as UserRole,
+          createdAt: u.createdAt.toISOString(),
+          updatedAt: u.updatedAt.toISOString(),
+          profile: u.profile,
+        }));
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getAdminUsers error:", err);
+      }
+    }
+
+    let list = UserStore.getAll();
+    if (filters?.role && filters.role !== "ALL" && filters.role !== "all") {
+      list = list.filter(u => u.role === filters.role!.toUpperCase());
+    }
+    if (filters?.query) {
+      const q = filters.query.toLowerCase().trim();
+      list = list.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.phoneNumber && u.phoneNumber.includes(q)));
+    }
+    return list;
+  },
+
+  async updateUserRole(userId: string, newRole: UserRole, adminName = "Platform Administrator") {
+    let updated: any = null;
+    if (process.env.DATABASE_URL) {
+      try {
+        updated = await prisma.user.update({
+          where: { id: userId },
+          data: { role: newRole as any },
+        });
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL updateUserRole error:", err);
+      }
+    }
+    if (!updated) {
+      updated = UserStore.updateRole(userId, newRole);
+    }
+
+    AuditStore.log("CHANGE_USER_ROLE", "USER", userId, `Changed role to ${newRole}`, adminName);
+    return updated;
+  },
+
+  async toggleUserSuspension(userId: string, isSuspended: boolean, adminName = "Platform Administrator") {
+    const updated = UserStore.toggleSuspension(userId, isSuspended);
+
+    AuditStore.log(
+      isSuspended ? "SUSPEND_USER" : "REACTIVATE_USER",
+      "USER",
+      userId,
+      `User account ${isSuspended ? "suspended" : "reactivated"}`,
+      adminName
+    );
+    return updated;
+  },
+
+  async getAdminReports() {
+    if (process.env.DATABASE_URL) {
+      try {
+        const reports = await prisma.propertyReport.findMany({
+          include: {
+            property: {
+              select: { id: true, title: true, slug: true, locality: true, city: true },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        return reports.map((r: any) => ({
+          id: r.id,
+          propertyId: r.propertyId,
+          propertyTitle: r.property?.title || "Property Listing",
+          propertySlug: r.property?.slug,
+          reporterName: r.reporterName,
+          reporterEmail: r.reporterEmail,
+          reason: r.reason,
+          details: r.details,
+          status: r.status,
+          createdAt: r.createdAt.toISOString(),
+        }));
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getAdminReports error:", err);
+      }
+    }
+    return ReportStore.getAll();
+  },
+
+  async updateReportStatus(reportId: string, status: "OPEN" | "INVESTIGATING" | "RESOLVED" | "DISMISSED", notes?: string, adminName = "Platform Administrator") {
+    if (process.env.DATABASE_URL) {
+      try {
+        await prisma.propertyReport.update({
+          where: { id: reportId },
+          data: { status: status as any, resolutionNotes: notes },
+        });
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL updateReportStatus error:", err);
+      }
+    }
+    ReportStore.updateStatus(reportId, status);
+    AuditStore.log("UPDATE_REPORT_STATUS", "PROPERTY_REPORT", reportId, `Status: ${status}.${notes ? ` Notes: ${notes}` : ""}`, adminName);
+    return true;
+  },
+
+  async getAdminLocations() {
+    return LocationStore.getAll();
+  },
+
+  async createAdminLocation(data: Omit<LocationItem, "id">, adminName = "Platform Administrator") {
+    const loc = LocationStore.create(data);
+    AuditStore.log("CREATE_LOCATION", "LOCATION", loc.id, `Created hub: ${data.city}, ${data.state}`, adminName);
+    return loc;
+  },
+
+  async updateAdminLocation(id: string, updates: Partial<LocationItem>, adminName = "Platform Administrator") {
+    const loc = LocationStore.update(id, updates);
+    AuditStore.log("UPDATE_LOCATION", "LOCATION", id, `Updated location details for ${loc?.city}`, adminName);
+    return loc;
+  },
+
+  async deleteAdminLocation(id: string, adminName = "Platform Administrator") {
+    const deleted = LocationStore.delete(id);
+    AuditStore.log("DELETE_LOCATION", "LOCATION", id, "Deleted location hub from registry", adminName);
+    return deleted;
+  },
+
+  async getAdminPackages() {
+    return PackageStore.getAll();
+  },
+
+  async updateAdminPackage(id: string, updates: Partial<ListingPackageItem>, adminName = "Platform Administrator") {
+    const pkg = PackageStore.update(id, updates);
+    AuditStore.log("UPDATE_PACKAGE", "LISTING_PACKAGE", id, `Updated package configuration for ${pkg?.name}`, adminName);
+    return pkg;
+  },
+
+  async getAdminContent() {
+    return ContentStore.getBanners();
+  },
+
+  async updateAdminContent(key: string, updates: Partial<ContentBannerItem>, adminName = "Platform Administrator") {
+    const content = ContentStore.updateBanner(key, updates);
+    AuditStore.log("UPDATE_CONTENT", "CONTENT_BANNER", key, `Updated banner headline/copy for ${key}`, adminName);
+    return content;
+  },
+
+  async getAdminPayments() {
+    return {
+      payments: PaymentStore.getAll(),
+      metrics: PaymentStore.getMetrics(),
+    };
+  },
+
+  async getAdminAuditLogs() {
+    return AuditStore.getAll();
+  },
+
+  async getAllEnquiriesPlatform() {
+    if (process.env.DATABASE_URL) {
+      try {
+        const records = await prisma.enquiry.findMany({
+          include: {
+            property: {
+              select: { id: true, title: true, slug: true, locality: true, city: true },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        return records.map((e: any) => ({
+          id: e.id,
+          propertyId: e.propertyId,
+          propertyTitle: e.property?.title,
+          propertySlug: e.property?.slug,
+          propertyLocation: `${e.property?.locality}, ${e.property?.city}`,
+          propertyPrice: Number(e.property?.price),
+          buyerName: e.buyerName,
+          buyerEmail: e.buyerEmail,
+          buyerPhone: e.buyerPhone,
+          message: e.message,
+          sellerId: e.sellerId,
+          status: e.status,
+          createdAt: e.createdAt.toISOString(),
+          updatedAt: e.updatedAt.toISOString(),
+        }));
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getAllEnquiriesPlatform error:", err);
+      }
+    }
+    return EnquiryStore.getAll();
+  },
+
+  // ---------------------------------------------------------------------------
+  // PHASE 9: PAYMENTS & IN-APP NOTIFICATIONS
+  // ---------------------------------------------------------------------------
+
+  async createNotification(data: {
+    userId: string;
+    title: string;
+    message: string;
+    type: string;
+    link?: string;
+    entityType?: string;
+    entityId?: string;
+  }): Promise<NotificationItem> {
+    if (process.env.DATABASE_URL) {
+      try {
+        const notif = await prisma.notification.create({
+          data: {
+            userId: data.userId,
+            title: data.title,
+            message: data.message,
+            type: data.type,
+            entityType: data.entityType || null,
+            entityId: data.entityId || null,
+            isRead: false,
+          },
+        });
+        return {
+          id: notif.id,
+          userId: notif.userId,
+          title: notif.title,
+          message: notif.message,
+          type: notif.type,
+          link: data.link,
+          entityType: notif.entityType,
+          entityId: notif.entityId,
+          isRead: notif.isRead,
+          createdAt: notif.createdAt.toISOString(),
+        };
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL createNotification error:", err);
+      }
+    }
+    return NotificationStore.create(data);
+  },
+
+  async createPaymentAttempt(data: {
+    userId: string;
+    userName: string;
+    userEmail: string;
+    packageId: string;
+    packageName: string;
+    amount: number;
+    currency: string;
+    orderId: string;
+    propertyId?: string;
+  }): Promise<PaymentRecordItem> {
+    const attempt = PaymentStore.create({
+      userId: data.userId,
+      userName: data.userName,
+      userEmail: data.userEmail,
+      packageId: data.packageId,
+      packageName: data.packageName,
+      amount: data.amount,
+      currency: data.currency,
+      orderId: data.orderId,
+      propertyId: data.propertyId,
+      status: "PENDING",
+      gateway: "Razorpay",
+    });
+
+    AuditStore.log(
+      "PAYMENT_ORDER_CREATED",
+      "PAYMENT",
+      attempt.id,
+      `Created payment order ${data.orderId} for package ${data.packageName} (₹${data.amount})`,
+      data.userName
+    );
+
+    return attempt;
+  },
+
+  async getPaymentByOrderId(orderId: string): Promise<PaymentRecordItem | null> {
+    return PaymentStore.findByOrderId(orderId);
+  },
+
+  async completePayment(
+    orderId: string,
+    gatewayPaymentId: string,
+    signature: string
+  ): Promise<{ payment: PaymentRecordItem; alreadyProcessed: boolean }> {
+    const existing = PaymentStore.findByOrderId(orderId);
+    if (!existing) {
+      throw new Error(`Payment order not found: ${orderId}`);
+    }
+
+    // Idempotency check: if already processed as SUCCESS, return immediately
+    if (existing.status === "SUCCESS") {
+      return { payment: existing, alreadyProcessed: true };
+    }
+
+    // Update payment record to SUCCESS
+    const updated = PaymentStore.updateByOrderId(orderId, {
+      status: "SUCCESS",
+      gatewayPaymentId,
+      signature,
+    })!;
+
+    // Activate paid benefits
+    if (updated.propertyId) {
+      await this.togglePropertyFeatured(updated.propertyId, true, "Landora Payments");
+      PropertyStore.update(updated.propertyId, {
+        packageId: updated.packageId,
+        isFeatured: true,
+      });
+    }
+
+    // Dispatch In-App Notification
+    await this.createNotification({
+      userId: updated.userId,
+      title: "Payment Confirmed: Package Activated",
+      message: `Your payment of ₹${updated.amount.toLocaleString("en-IN")} for ${updated.packageName || "Listing Package"} was confirmed. Benefits are now active!`,
+      type: "PAYMENT_SUCCESS",
+      link: updated.propertyId ? `/properties` : `/dashboard/packages`,
+      entityType: "PAYMENT",
+      entityId: updated.id,
+    });
+
+    // Audit log
+    AuditStore.log(
+      "PAYMENT_COMPLETED",
+      "PAYMENT",
+      updated.id,
+      `Payment verified & confirmed for ${updated.packageName} (₹${updated.amount}). TxID: ${gatewayPaymentId}`,
+      updated.userName
+    );
+
+    return { payment: updated, alreadyProcessed: false };
+  },
+
+  async failPayment(orderId: string, failureReason: string): Promise<PaymentRecordItem | null> {
+    const existing = PaymentStore.findByOrderId(orderId);
+    if (!existing) return null;
+
+    if (existing.status === "SUCCESS") {
+      // Do not overwrite a confirmed payment
+      return existing;
+    }
+
+    const updated = PaymentStore.updateByOrderId(orderId, {
+      status: "FAILED",
+      failureReason,
+    });
+
+    if (updated) {
+      await this.createNotification({
+        userId: updated.userId,
+        title: "Payment Incomplete",
+        message: `Your payment for ${updated.packageName || "package"} could not be completed. Reason: ${failureReason}`,
+        type: "PAYMENT_FAILED",
+        link: `/dashboard/packages`,
+        entityType: "PAYMENT",
+        entityId: updated.id,
+      });
+
+      AuditStore.log(
+        "PAYMENT_FAILED",
+        "PAYMENT",
+        updated.id,
+        `Payment failed for order ${orderId}. Reason: ${failureReason}`,
+        updated.userName
+      );
+    }
+
+    return updated;
+  },
+
+  async refundPayment(orderId: string, reason = "Customer refund requested"): Promise<PaymentRecordItem | null> {
+    const existing = PaymentStore.findByOrderId(orderId);
+    if (!existing) return null;
+
+    const updated = PaymentStore.updateByOrderId(orderId, {
+      status: "REFUNDED",
+      failureReason: reason,
+    });
+
+    if (updated) {
+      if (updated.propertyId) {
+        await this.togglePropertyFeatured(updated.propertyId, false, "Landora Payments Refund");
+      }
+
+      await this.createNotification({
+        userId: updated.userId,
+        title: "Payment Refund Processed",
+        message: `Refund of ₹${updated.amount.toLocaleString("en-IN")} for ${updated.packageName} has been processed.`,
+        type: "PAYMENT_REFUNDED",
+        link: `/dashboard/packages`,
+        entityType: "PAYMENT",
+        entityId: updated.id,
+      });
+
+      AuditStore.log(
+        "PAYMENT_REFUNDED",
+        "PAYMENT",
+        updated.id,
+        `Payment refunded for order ${orderId}. Reason: ${reason}`,
+        "System / Gateway Webhook"
+      );
+    }
+
     return updated;
   },
 };

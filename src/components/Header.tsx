@@ -9,6 +9,7 @@ import {
   Heart, 
   Menu, 
   X, 
+  Bell,
   ShieldCheck, 
   PhoneCall, 
   HelpCircle,
@@ -50,8 +51,26 @@ export default function Header({
   const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [recentNotifs, setRecentNotifs] = useState<any[]>([]);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [activeNavDropdown, setActiveNavDropdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch("/api/user/notifications");
+        const data = await res.json();
+        if (data.success) {
+          setUnreadNotifCount(data.unreadCount || 0);
+          setRecentNotifs((data.notifications || []).slice(0, 4));
+        }
+      } catch {}
+    };
+    fetchNotifications();
+  }, [user]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -459,6 +478,85 @@ export default function Header({
                 </span>
               )}
             </Link>
+
+            {/* Notification Bell with Badge & Dropdown */}
+            {user && (
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                  title="Notifications & Alerts"
+                  className="p-1.5 rounded-full transition cursor-pointer relative text-slate-700 hover:text-emerald-700 hover:bg-white/80 shrink-0 flex items-center justify-center"
+                >
+                  <Bell className="w-4 h-4" />
+                  {unreadNotifCount > 0 && (
+                    <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-emerald-600 text-white rounded-full text-[9px] font-bold flex items-center justify-center animate-pulse">
+                      {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                    </span>
+                  )}
+                </button>
+
+                {notifDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 py-3 z-50 animate-in fade-in zoom-in-95 duration-100 text-slate-800">
+                    <div className="flex items-center justify-between px-4 pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-1.5">
+                        <Bell className="w-3.5 h-3.5 text-[#0c4a3e]" />
+                        <span className="text-xs font-bold text-slate-900">Notifications</span>
+                        {unreadNotifCount > 0 && (
+                          <span className="text-[10px] font-bold bg-emerald-100 text-[#0c4a3e] px-1.5 py-0.2 rounded-full">
+                            {unreadNotifCount} new
+                          </span>
+                        )}
+                      </div>
+                      <Link
+                        href="/dashboard/notifications"
+                        onClick={() => setNotifDropdownOpen(false)}
+                        className="text-[11px] font-semibold text-[#0c4a3e] hover:underline"
+                      >
+                        View All
+                      </Link>
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                      {recentNotifs.length === 0 ? (
+                        <div className="py-6 text-center text-xs text-slate-400">
+                          No notifications yet
+                        </div>
+                      ) : (
+                        recentNotifs.map((n) => (
+                          <Link
+                            key={n.id}
+                            href={n.link || "/dashboard/notifications"}
+                            onClick={() => setNotifDropdownOpen(false)}
+                            className={`block p-3 text-left hover:bg-slate-50 transition ${
+                              !n.isRead ? "bg-emerald-50/40" : ""
+                            }`}
+                          >
+                            <p className="text-xs font-bold text-slate-900 leading-snug">{n.title}</p>
+                            <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{n.message}</p>
+                            <span className="text-[9px] text-slate-400 block mt-1 font-mono">
+                              {new Date(n.createdAt).toLocaleDateString("en-IN", {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="pt-2 px-3 border-t border-slate-100 text-center">
+                      <Link
+                        href="/dashboard/notifications"
+                        onClick={() => setNotifDropdownOpen(false)}
+                        className="block w-full py-1.5 text-xs font-bold text-[#0c4a3e] hover:bg-emerald-50 rounded-lg transition"
+                      >
+                        Open Notification Center &rarr;
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* User Profile / Login Drawer */}
             {user ? (

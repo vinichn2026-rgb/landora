@@ -96,6 +96,7 @@ export default function PropertyPublishWizard({ initialData, isEditing = false }
     sellerEmail: initialData?.sellerEmail || user?.email || "",
     sellerWhatsapp: initialData?.sellerWhatsapp || "",
     bestTimeToCall: "Anytime (9 AM - 8 PM)",
+    packageId: initialData?.packageId || "pkg-basic",
   });
 
   // UI state
@@ -1206,6 +1207,59 @@ export default function PropertyPublishWizard({ initialData, isEditing = false }
               </div>
             </div>
 
+            {/* Listing Package Selection */}
+            <div className="space-y-3 pt-2">
+              <label className="text-sm font-bold text-slate-900 block">
+                Choose Listing Tier &amp; Visibility
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div
+                  onClick={() => setFormData({ ...formData, packageId: "pkg-basic" })}
+                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition ${
+                    formData.packageId === "pkg-basic"
+                      ? "border-[#0c4a3e] bg-emerald-50/40 ring-1 ring-[#0c4a3e]"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-slate-900">Standard Free</span>
+                    <span className="text-xs font-black text-[#0c4a3e]">₹0</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">45 days validity &bull; Direct phone inquiries</p>
+                </div>
+
+                <div
+                  onClick={() => setFormData({ ...formData, packageId: "pkg-featured" })}
+                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition ${
+                    formData.packageId === "pkg-featured"
+                      ? "border-[#0c4a3e] bg-emerald-50/40 ring-1 ring-[#0c4a3e]"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-slate-900">Featured Boost</span>
+                    <span className="text-xs font-black text-[#0c4a3e]">₹1,499</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">60 days &bull; Featured badge &bull; Top search rank</p>
+                </div>
+
+                <div
+                  onClick={() => setFormData({ ...formData, packageId: "pkg-agent" })}
+                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition ${
+                    formData.packageId === "pkg-agent"
+                      ? "border-[#0c4a3e] bg-emerald-50/40 ring-1 ring-[#0c4a3e]"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-slate-900">Builder Pro</span>
+                    <span className="text-xs font-black text-[#0c4a3e]">₹4,999</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">90 days &bull; Dedicated microsite &bull; 15 listings</p>
+                </div>
+              </div>
+            </div>
+
             {/* Moderation Disclosure Note */}
             <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-3">
               <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -1239,11 +1293,20 @@ export default function PropertyPublishWizard({ initialData, isEditing = false }
             </p>
 
             <div className="pt-6 flex flex-wrap items-center justify-center gap-3">
+              {submittedProperty?.packageId && submittedProperty.packageId !== "pkg-basic" && (
+                <Link
+                  href="/dashboard/packages"
+                  className="px-5 py-2.5 rounded-xl bg-[#dfb33d] hover:bg-[#c99f32] text-slate-900 text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-slate-900" />
+                  <span>Activate Package &amp; Boost Listing</span>
+                </Link>
+              )}
               <Link
                 href="/dashboard/seller/listings"
                 className="px-5 py-2.5 rounded-xl bg-[#0c4a3e] hover:bg-[#072e27] text-white text-xs font-bold transition shadow-xs"
               >
-                View in Seller Dashboard →
+                View in Seller Dashboard &rarr;
               </Link>
               <button
                 type="button"

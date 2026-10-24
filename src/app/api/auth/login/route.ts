@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DataAccess } from "@/lib/data-access";
 import { comparePassword, signSessionToken, setServerSessionCookie } from "@/lib/auth";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Brute-force protection: max 10 login attempts per minute per IP
+    const rateLimited = applyRateLimit(request, "auth_login", 10, 60000);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
     const { email, password } = body;
 

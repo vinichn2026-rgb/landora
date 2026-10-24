@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { DataAccess } from "@/lib/data-access";
 import { hashPassword, signSessionToken, setServerSessionCookie } from "@/lib/auth";
 import { UserRole } from "@/types";
+import { sendRegistrationVerificationEmail } from "@/lib/email";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Abuse protection: max 10 registrations per 10 minutes per IP
+    const rateLimited = applyRateLimit(request, "auth_register", 10, 600000);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
     const { name, email, phoneNumber, role, password, city } = body;
 
@@ -67,6 +73,23 @@ export async function POST(request: NextRequest) {
     });
 
     await setServerSessionCookie(sessionToken);
+
+    // Phase 9: Welcome in-app notification & Registration Verification Email
+    await DataAccess.createNotification({
+      userId: user.id,
+      title: "Welcome to Landora",
+      message: "Your account has been created. Start exploring DTCP/CMDA verified plots and residential lands.",
+      type: "ACCOUNT_WELCOME",
+      link: "/properties",
+      entityType: "USER",
+      entityId: user.id,
+    });
+
+    await sendRegistrationVerificationEmail(
+      user.email,
+      user.name,
+      `vfy_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+    );
 
     return NextResponse.json({
       success: true,

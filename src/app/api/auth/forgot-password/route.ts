@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DataAccess } from "@/lib/data-access";
 import { signPasswordResetToken } from "@/lib/auth";
+import { sendPasswordResetEmail, isEmailProviderConfigured } from "@/lib/email";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Password reset spam protection: max 5 requests per 15 minutes per IP
+    const rateLimited = applyRateLimit(request, "auth_forgot_password", 5, 900000);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
     const { email } = body;
 
@@ -21,20 +27,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: "If an account exists with this email, you will receive password reset instructions.",
-        emailProviderConfigured: false,
+        emailProviderConfigured: isEmailProviderConfigured(),
       });
     }
 
     // Generate signed reset token (1 hour validity)
     const resetToken = await signPasswordResetToken(user.id, user.email);
 
-    // Honest reporting per user instructions:
-    // "Do not claim email or OTP verification works unless the required provider is configured."
+    // Phase 9: Dispatch password reset email
+    const dispatchResult = await sendPasswordResetEmail(user.email, user.name, resetToken);
+
     return NextResponse.json({
       success: true,
       message: "Password reset request initiated.",
-      emailProviderConfigured: false,
-      providerNotice: "No live transactional email service (e.g., AWS SES, Resend) is configured in this environment. In development mode, use the reset token below to proceed.",
+      emailProviderConfigured: dispatchResult.providerConfigured,
+      providerNotice: dispatchResult.providerConfigured
+        ? "Password reset email dispatched to your inbox."
+        : "Live email provider not configured. For development/testing, use the direct reset link below.",
       devResetToken: resetToken,
       resetUrl: `/reset-password?token=${encodeURIComponent(resetToken)}`,
     });

@@ -2,7 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, ArrowLeft, Check, CheckCheck, Loader2, Sparkles, TrendingDown, MessageSquare } from "lucide-react";
+import { 
+  Bell, 
+  ArrowLeft, 
+  Check, 
+  CheckCheck, 
+  Loader2, 
+  Sparkles, 
+  TrendingDown, 
+  MessageSquare,
+  CreditCard,
+  Building2,
+  AlertTriangle,
+  ArrowRight
+} from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import Container from "@/components/ui/Container";
@@ -63,6 +76,9 @@ export default function UserNotificationsPage() {
   const getIcon = (type: string) => {
     if (type === "PRICE_DROP") return <TrendingDown className="w-5 h-5 text-emerald-600" />;
     if (type === "NEW_ENQUIRY" || type === "ENQUIRY_UPDATE") return <MessageSquare className="w-5 h-5 text-sky-600" />;
+    if (type === "PAYMENT_SUCCESS") return <CreditCard className="w-5 h-5 text-emerald-600" />;
+    if (type === "PAYMENT_FAILED" || type === "LISTING_REJECTED") return <AlertTriangle className="w-5 h-5 text-rose-600" />;
+    if (type === "LISTING_APPROVED" || type === "LISTING_SUBMITTED") return <Building2 className="w-5 h-5 text-[#0c4a3e]" />;
     return <Sparkles className="w-5 h-5 text-[#c59b27]" />;
   };
 
@@ -148,14 +164,25 @@ export default function UserNotificationsPage() {
                       {notif.message}
                     </p>
 
-                    {!notif.isRead && (
-                      <button
-                        onClick={() => handleMarkSingleRead(notif.id)}
-                        className="text-[11px] font-bold text-[#0c4a3e] hover:underline pt-1 inline-block cursor-pointer"
-                      >
-                        Mark as read
-                      </button>
-                    )}
+                    <div className="flex items-center gap-3 pt-1">
+                      {notif.link && (
+                        <Link
+                          href={notif.link}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0c4a3e] hover:underline"
+                        >
+                          <span>View Details</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </Link>
+                      )}
+                      {!notif.isRead && (
+                        <button
+                          onClick={() => handleMarkSingleRead(notif.id)}
+                          className="text-[11px] font-bold text-slate-500 hover:text-slate-800 hover:underline cursor-pointer"
+                        >
+                          Mark as read
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

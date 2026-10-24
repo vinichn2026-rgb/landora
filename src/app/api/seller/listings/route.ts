@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSessionUser } from "@/lib/auth";
 import { DataAccess } from "@/lib/data-access";
 import { PropertyCategoryType, ListingType } from "@/types";
+import { sendListingSubmittedEmail } from "@/lib/email";
 
 // GET /api/seller/listings - Retrieve all listings for the authenticated user
 export async function GET(request: NextRequest) {
@@ -200,6 +201,28 @@ export async function POST(request: NextRequest) {
           }))
         : [{ id: "placeholder", url: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1200&auto=format&fit=crop", isPrimary: true }],
     });
+
+    // Phase 9: If submitted for review (not draft), dispatch notification and email
+    if (!isDraft) {
+      await DataAccess.createNotification({
+        userId: user.id,
+        title: "Listing Under Review",
+        message: `Your property "${createdProperty.title}" was submitted for review. Our moderation team will verify documentation within 24 hours.`,
+        type: "LISTING_SUBMITTED",
+        link: "/dashboard/seller/listings",
+        entityType: "PROPERTY",
+        entityId: createdProperty.id,
+      });
+
+      if (effectiveSellerEmail) {
+        await sendListingSubmittedEmail(
+          effectiveSellerEmail,
+          effectiveSellerName,
+          createdProperty.title,
+          createdProperty.id
+        );
+      }
+    }
 
     return NextResponse.json({
       success: true,

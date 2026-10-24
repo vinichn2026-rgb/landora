@@ -120,3 +120,15 @@ export async function getServerSessionUser(): Promise<SessionUser | null> {
     return null;
   }
 }
+
+// Require Authenticated Admin User
+export async function requireAdminSession(): Promise<SessionUser> {
+  const user = await getServerSessionUser();
+  if (!user) {
+    throw new Error("UNAUTHORIZED: Sign in as an administrator to access this operation.");
+  }
+  if (user.role !== "ADMIN") {
+    throw new Error("FORBIDDEN: Insufficient permissions. Administrator privileges required.");
+  }
+  return user;
+}

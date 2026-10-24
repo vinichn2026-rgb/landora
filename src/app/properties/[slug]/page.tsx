@@ -167,8 +167,42 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
     }
   };
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "RealEstateListing",
+    name: property.title,
+    description: property.description,
+    url: `https://landora.in/properties/${property.slug}`,
+    datePosted: property.publishedAt,
+    price: property.price,
+    priceCurrency: "INR",
+    image: property.images?.map((img) => img.url),
+    offers: {
+      "@type": "Offer",
+      price: property.price,
+      priceCurrency: "INR",
+      businessFunction: property.listingType === "RENT" ? "http://purl.org/goodrelations/v1#LeaseOut" : "http://purl.org/goodrelations/v1#Sell",
+    },
+    spatialCoverage: {
+      "@type": "Place",
+      name: `${property.locality}, ${property.city}`,
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: property.address,
+        addressLocality: property.locality,
+        addressRegion: property.state,
+        postalCode: property.pinCode,
+        addressCountry: "IN",
+      },
+    },
+  };
+
   return (
     <div className="min-h-screen bg-[#fbfbfa] text-[#132a24] flex flex-col font-sans">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Header currentCity={property.city} />
 
       {/* Breadcrumb Navigation Strip */}

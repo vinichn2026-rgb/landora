@@ -79,6 +79,7 @@ export interface PropertyItem {
   sellerEmail: string;
   sellerWhatsapp?: string;
   rejectionReason?: string;
+  packageId?: string;
   amenities: string[];
   images: PropertyImageItem[];
   viewsCount: number;
@@ -195,17 +196,22 @@ export interface ContentBannerItem {
 
 export interface PaymentRecordItem {
   id: string;
+  orderId?: string;
   userId: string;
   userName: string;
   userEmail: string;
   packageId?: string;
   packageName?: string;
+  propertyId?: string;
   amount: number;
   currency: string;
   status: "SUCCESS" | "PENDING" | "FAILED" | "REFUNDED";
   gateway: string;
   gatewayPaymentId?: string;
+  signature?: string;
+  failureReason?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface NotificationItem {
@@ -214,6 +220,7 @@ export interface NotificationItem {
   title: string;
   message: string;
   type: string;
+  link?: string;
   entityType?: string | null;
   entityId?: string | null;
   isRead: boolean;

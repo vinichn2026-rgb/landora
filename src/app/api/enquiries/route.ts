@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DataAccess } from "@/lib/data-access";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Lead spam protection: max 10 enquiries per 5 minutes per IP
+    const rateLimited = applyRateLimit(request, "property_enquiry", 10, 300000);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
 
     const { propertyId, buyerName, buyerEmail, buyerPhone, message, sellerId } = body;

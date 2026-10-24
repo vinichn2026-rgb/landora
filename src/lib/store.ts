@@ -807,17 +807,52 @@ export const PaymentStore = {
   getAll(): PaymentRecordItem[] {
     return globalThis.__landora_payments || [];
   },
+  findById(id: string): PaymentRecordItem | null {
+    const list = globalThis.__landora_payments || [];
+    return list.find(p => p.id === id) || null;
+  },
+  findByOrderId(orderId: string): PaymentRecordItem | null {
+    const list = globalThis.__landora_payments || [];
+    return list.find(p => p.orderId === orderId) || null;
+  },
+  create(data: Omit<PaymentRecordItem, "id" | "createdAt">): PaymentRecordItem {
+    const record: PaymentRecordItem = {
+      ...data,
+      id: `pay-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    globalThis.__landora_payments = [record, ...(globalThis.__landora_payments || [])];
+    return record;
+  },
+  update(id: string, updates: Partial<PaymentRecordItem>): PaymentRecordItem | null {
+    const list = globalThis.__landora_payments || [];
+    const item = list.find(p => p.id === id);
+    if (!item) return null;
+    Object.assign(item, { ...updates, updatedAt: new Date().toISOString() });
+    return item;
+  },
+  updateByOrderId(orderId: string, updates: Partial<PaymentRecordItem>): PaymentRecordItem | null {
+    const list = globalThis.__landora_payments || [];
+    const item = list.find(p => p.orderId === orderId);
+    if (!item) return null;
+    Object.assign(item, { ...updates, updatedAt: new Date().toISOString() });
+    return item;
+  },
   getMetrics() {
     const list = globalThis.__landora_payments || [];
     const totalAmount = list
       .filter(p => p.status === "SUCCESS")
       .reduce((sum, p) => sum + p.amount, 0);
+    const hasLiveKeys = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
     return {
       totalTransactions: list.length,
       successfulTransactions: list.filter(p => p.status === "SUCCESS").length,
       totalAmount,
       currency: "INR",
-      gatewayStatus: "Sandbox / Test Mode (Live payment keys not configured)",
+      gatewayStatus: hasLiveKeys 
+        ? "Razorpay Live Gateway Active" 
+        : "Sandbox / Test Mode (Live payment keys not configured)",
     };
   }
 };
@@ -826,6 +861,11 @@ export const NotificationStore = {
   getByUser(userId: string): NotificationItem[] {
     const list = globalThis.__landora_notifications || [];
     return list.filter(n => n.userId === userId);
+  },
+
+  getUnreadCount(userId: string): number {
+    const list = globalThis.__landora_notifications || [];
+    return list.filter(n => n.userId === userId && !n.isRead).length;
   },
 
   markRead(id: string, userId: string): boolean {
@@ -843,10 +883,11 @@ export const NotificationStore = {
     });
   },
 
-  create(data: Omit<NotificationItem, "id" | "createdAt">): NotificationItem {
+  create(data: Omit<NotificationItem, "id" | "createdAt"> | any): NotificationItem {
     const newNotif: NotificationItem = {
+      isRead: false,
       ...data,
-      id: `notif-${Date.now()}`,
+      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       createdAt: new Date().toISOString(),
     };
     globalThis.__landora_notifications = [newNotif, ...(globalThis.__landora_notifications || [])];
