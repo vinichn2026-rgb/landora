@@ -15,33 +15,36 @@ import {
   Compass,
   Briefcase
 } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 const CATEGORIES = [
-  { id: "all", label: "All Residential", type: "all" },
-  { id: "plots", label: "Plots / Land", type: "RESIDENTIAL_PLOT" },
-  { id: "apartments", label: "Flats / Apartments", type: "APARTMENT" },
-  { id: "houses", label: "Independent Houses & Villas", type: "HOUSE" },
-  { id: "commercial", label: "Commercial Properties", type: "COMMERCIAL_PLOT" },
-  { id: "agri", label: "Agricultural Land", type: "AGRICULTURAL_LAND" },
+  { id: "plots", label: "Plots & Land Sites", labelTa: "மனைகள் / லேஅவுட் நிலம்", type: "RESIDENTIAL_PLOT" },
+  { id: "agri", label: "Agricultural Farmland", labelTa: "விவசாய நிலம்", type: "AGRICULTURAL_LAND" },
+  { id: "commercial-plots", label: "Commercial Highway Plots", labelTa: "வணிக நில மனைகள்", type: "COMMERCIAL_PLOT" },
+  { id: "all", label: "All Properties", labelTa: "அனைத்து சொத்துகள்", type: "all" },
+  { id: "apartments", label: "Flats / Apartments", labelTa: "அடுக்குமாடி குடியிருப்புகள்", type: "APARTMENT" },
+  { id: "houses", label: "Independent Houses & Villas", labelTa: "தனி வீடுகள் & வில்லாக்கள்", type: "HOUSE" },
+  { id: "commercial", label: "Commercial Buildings", labelTa: "வணிக கட்டிடங்கள்", type: "COMMERCIAL_BUILDING" },
 ];
 
 const SUGGESTIONS = [
-  { city: "Coimbatore", locality: "Peelamedu", tag: "IT & Airport Corridor" },
-  { city: "Coimbatore", locality: "Saravanampatti", tag: "Tech Park SEZ" },
-  { city: "Coimbatore", locality: "Gandhipuram", tag: "City Core Hub" },
-  { city: "Chennai", locality: "OMR IT Expressway", tag: "Top Investment" },
-  { city: "Madurai", locality: "Ring Road & Othakadai", tag: "High Growth" },
-  { city: "Tiruppur", locality: "Avinashi Highway", tag: "Industrial Corridor" },
-  { city: "Bengaluru", locality: "Whitefield & Electronic City", tag: "Tech Corridor" },
+  { city: "Coimbatore", locality: "Peelamedu", tag: "IT & Airport Corridor", tagTa: "IT & விமான நிலைய காரிடார்" },
+  { city: "Coimbatore", locality: "Saravanampatti", tag: "Tech Park SEZ", tagTa: "டெக் பார்க் SEZ" },
+  { city: "Coimbatore", locality: "Gandhipuram", tag: "City Core Hub", tagTa: "நகர மைய பகுதி" },
+  { city: "Chennai", locality: "OMR IT Expressway", tag: "Top Investment", tagTa: "சிறந்த முதலீடு" },
+  { city: "Madurai", locality: "Ring Road & Othakadai", tag: "High Growth", tagTa: "விரைவான வளர்ச்சி" },
+  { city: "Tiruppur", locality: "Avinashi Highway", tag: "Industrial Corridor", tagTa: "தொழிற்துறை காரிடார்" },
+  { city: "Bengaluru", locality: "Whitefield & Electronic City", tag: "Tech Corridor", tagTa: "தொழில்நுட்ப மையம்" },
 ];
 
 export default function BannerSearchCard() {
   const router = useRouter();
+  const { language, t } = useLanguage();
 
-  // Active top tab (Buy, Rent, New Launch, Commercial, Plots/Land, Projects)
-  const [activeTab, setActiveTab] = useState<"buy" | "rent" | "new-launch" | "commercial" | "plots" | "projects">("buy");
-  const [selectedCategory, setSelectedCategory] = useState("All Residential");
-  const [selectedCategoryType, setSelectedCategoryType] = useState("all");
+  // Active top tab (Plots/Land is #1 FIRST PRIORITY)
+  const [activeTab, setActiveTab] = useState<"plots" | "buy" | "rent" | "new-launch" | "commercial" | "projects">("plots");
+  const [selectedCategory, setSelectedCategory] = useState("Plots & Land Sites");
+  const [selectedCategoryType, setSelectedCategoryType] = useState("RESIDENTIAL_PLOT");
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -62,25 +65,28 @@ export default function BannerSearchCard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleTabChange = (tab: "buy" | "rent" | "new-launch" | "commercial" | "plots" | "projects") => {
+  const handleTabChange = (tab: "plots" | "buy" | "rent" | "new-launch" | "commercial" | "projects") => {
     setActiveTab(tab);
     if (tab === "plots") {
-      setSelectedCategory("Plots / Land");
+      setSelectedCategory(language === "ta" ? "மனைகள் / லேஅவுட் நிலம்" : "Plots & Land Sites");
       setSelectedCategoryType("RESIDENTIAL_PLOT");
     } else if (tab === "commercial") {
-      setSelectedCategory("Commercial Properties");
+      setSelectedCategory(language === "ta" ? "வணிகக் கட்டிடங்கள்" : "Commercial Properties");
       setSelectedCategoryType("COMMERCIAL_PLOT");
     } else if (tab === "new-launch" || tab === "projects") {
-      setSelectedCategory("New Projects");
+      setSelectedCategory(language === "ta" ? "புதிய திட்டங்கள்" : "New Projects");
       setSelectedCategoryType("all");
+    } else if (tab === "buy") {
+      setSelectedCategory(language === "ta" ? "தனி வீடுகள் & வில்லாக்கள்" : "Independent Houses & Villas");
+      setSelectedCategoryType("HOUSE");
     } else {
-      setSelectedCategory("All Residential");
+      setSelectedCategory(language === "ta" ? "அனைத்து சொத்துகள்" : "All Properties");
       setSelectedCategoryType("all");
     }
   };
 
   const handleCategorySelect = (cat: typeof CATEGORIES[0]) => {
-    setSelectedCategory(cat.label);
+    setSelectedCategory(language === "ta" ? cat.labelTa : cat.label);
     setSelectedCategoryType(cat.type);
     setCategoryDropdownOpen(false);
   };
@@ -127,7 +133,12 @@ export default function BannerSearchCard() {
     }
 
     if (activeTab === "plots") {
-      params.set("propertyType", "RESIDENTIAL_PLOT");
+      if (selectedCategoryType && selectedCategoryType !== "all") {
+        params.set("propertyType", selectedCategoryType);
+      } else {
+        params.set("propertyType", "RESIDENTIAL_PLOT");
+      }
+      params.set("listingType", "SALE");
     } else if (activeTab === "commercial") {
       params.set("propertyType", "COMMERCIAL_PLOT");
     } else if (selectedCategoryType !== "all") {
@@ -151,10 +162,30 @@ export default function BannerSearchCard() {
       ref={containerRef}
       className="bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-visible text-slate-800"
     >
-      {/* TOP ROW: Search Intent Tabs */}
+      {/* TOP ROW: Search Intent Tabs (Plots & Land is #1 Priority) */}
       <div className="flex items-center justify-between border-b border-slate-100 px-4 sm:px-6 pt-2 overflow-x-auto scrollbar-none">
-        <div className="flex items-center gap-4 sm:gap-8 text-xs sm:text-sm font-bold whitespace-nowrap">
-          {/* Buy */}
+        <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm font-bold whitespace-nowrap">
+          {/* Plots & Land - TOP PRIORITY */}
+          <button
+            type="button"
+            onClick={() => handleTabChange("plots")}
+            className={`py-3.5 transition-all relative cursor-pointer flex items-center gap-1.5 ${
+              activeTab === "plots" 
+                ? "text-[#0c4a3e] font-black" 
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Compass className={`w-4 h-4 ${activeTab === "plots" ? "text-[#c59b27]" : "text-slate-400"}`} />
+            <span>{language === "ta" ? "மனைகள் & நிலம்" : "Plots & Land"}</span>
+            <span className="bg-[#c59b27] text-slate-950 text-[9px] px-1.5 py-0.2 rounded font-black tracking-wider uppercase shadow-2xs">
+              TOP
+            </span>
+            {activeTab === "plots" && (
+              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0c4a3e] rounded-t-full" />
+            )}
+          </button>
+
+          {/* Buy Homes */}
           <button
             type="button"
             onClick={() => handleTabChange("buy")}
@@ -164,9 +195,9 @@ export default function BannerSearchCard() {
                 : "text-slate-500 hover:text-slate-900"
             }`}
           >
-            <span>Buy</span>
+            <span>{language === "ta" ? "வீடுகள் வாங்க" : "Buy Homes"}</span>
             {activeTab === "buy" && (
-              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0066cc] rounded-t-full" />
+              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0c4a3e] rounded-t-full" />
             )}
           </button>
 
@@ -180,13 +211,13 @@ export default function BannerSearchCard() {
                 : "text-slate-500 hover:text-slate-900"
             }`}
           >
-            <span>Rent</span>
+            <span>{language === "ta" ? "வாடகைக்கு" : "Rent"}</span>
             {activeTab === "rent" && (
-              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0066cc] rounded-t-full" />
+              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0c4a3e] rounded-t-full" />
             )}
           </button>
 
-          {/* New Launch (with red notification dot) */}
+          {/* New Launch (with notification dot) */}
           <button
             type="button"
             onClick={() => handleTabChange("new-launch")}
@@ -196,10 +227,10 @@ export default function BannerSearchCard() {
                 : "text-slate-500 hover:text-slate-900"
             }`}
           >
-            <span>New Launch</span>
+            <span>{language === "ta" ? "புதிய திட்டங்கள்" : "New Launch"}</span>
             <span className="w-2 h-2 rounded-full bg-rose-500 inline-block animate-pulse" />
             {activeTab === "new-launch" && (
-              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0066cc] rounded-t-full" />
+              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0c4a3e] rounded-t-full" />
             )}
           </button>
 
@@ -213,25 +244,9 @@ export default function BannerSearchCard() {
                 : "text-slate-500 hover:text-slate-900"
             }`}
           >
-            <span>Commercial</span>
+            <span>{language === "ta" ? "வணிகம்" : "Commercial"}</span>
             {activeTab === "commercial" && (
-              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0066cc] rounded-t-full" />
-            )}
-          </button>
-
-          {/* Plots/Land */}
-          <button
-            type="button"
-            onClick={() => handleTabChange("plots")}
-            className={`py-3.5 transition-all relative cursor-pointer flex items-center gap-1 ${
-              activeTab === "plots" 
-                ? "text-slate-900 font-extrabold" 
-                : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            <span>Plots/Land</span>
-            {activeTab === "plots" && (
-              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0066cc] rounded-t-full" />
+              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0c4a3e] rounded-t-full" />
             )}
           </button>
 
@@ -245,9 +260,9 @@ export default function BannerSearchCard() {
                 : "text-slate-500 hover:text-slate-900"
             }`}
           >
-            <span>Projects</span>
+            <span>{language === "ta" ? "திட்டங்கள்" : "Layout Projects"}</span>
             {activeTab === "projects" && (
-              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0066cc] rounded-t-full" />
+              <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#0c4a3e] rounded-t-full" />
             )}
           </button>
         </div>
@@ -258,9 +273,9 @@ export default function BannerSearchCard() {
             href="/post-property"
             className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-[#0c4a3e] transition py-1"
           >
-            <span>Post Property</span>
+            <span>{t("nav.postProperty", "Post Property")}</span>
             <span className="bg-[#00875a] text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider">
-              FREE
+              {t("nav.free", "FREE")}
             </span>
           </Link>
         </div>
@@ -287,7 +302,7 @@ export default function BannerSearchCard() {
             {categoryDropdownOpen && (
               <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                  Select Property Type
+                  {language === "ta" ? "சொத்து வகையைத் தேர்ந்தெடுக்கவும்" : "Select Property Type"}
                 </div>
                 {CATEGORIES.map((cat) => (
                   <button
@@ -296,8 +311,8 @@ export default function BannerSearchCard() {
                     onClick={() => handleCategorySelect(cat)}
                     className="w-full text-left px-3.5 py-2 text-xs font-semibold hover:bg-sky-50 hover:text-sky-700 flex items-center justify-between transition cursor-pointer"
                   >
-                    <span>{cat.label}</span>
-                    {selectedCategory === cat.label && (
+                    <span>{language === "ta" ? cat.labelTa : cat.label}</span>
+                    {selectedCategory === (language === "ta" ? cat.labelTa : cat.label) && (
                       <Check className="w-3.5 h-3.5 text-sky-600" />
                     )}
                   </button>
@@ -320,14 +335,14 @@ export default function BannerSearchCard() {
                 setSuggestionsOpen(true);
               }}
               onFocus={() => setSuggestionsOpen(true)}
-              placeholder='Search "Coimbatore", "Peelamedu", "Saravanampatti", "Chennai"...'
+              placeholder={language === "ta" ? 'தேடுக "கோவை", "பீளமேடு", "சரவணம்பட்டி", "சென்னை"...' : 'Search "Coimbatore", "Peelamedu", "Saravanampatti", "Chennai"...'}
               className="w-full text-xs sm:text-sm bg-transparent outline-none text-slate-800 font-medium placeholder-slate-400 py-1.5"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="text-slate-400 hover:text-slate-600 px-2 text-xs"
+                className="text-slate-400 hover:text-slate-600 px-2 text-xs cursor-pointer"
               >
                 ✕
               </button>
@@ -337,8 +352,8 @@ export default function BannerSearchCard() {
             {suggestionsOpen && (
               <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 z-50 animate-in fade-in duration-100 text-slate-800">
                 <div className="px-3.5 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
-                  <span>Popular Growth Localities</span>
-                  <span className="text-[10px] text-emerald-600">Quick Select</span>
+                  <span>{language === "ta" ? "பிரபலமான வளர்ச்சிப் பகுதிகள்" : "Popular Growth Localities"}</span>
+                  <span className="text-[10px] text-emerald-600">{language === "ta" ? "விரைவுத் தேர்வு" : "Quick Select"}</span>
                 </div>
                 <div className="py-1">
                   {SUGGESTIONS.map((item) => (
@@ -359,7 +374,7 @@ export default function BannerSearchCard() {
                         </div>
                       </div>
                       <span className="text-[10px] bg-slate-100 text-slate-600 font-medium px-2 py-0.5 rounded-full">
-                        {item.tag}
+                        {language === "ta" ? item.tagTa : item.tag}
                       </span>
                     </button>
                   ))}
@@ -374,7 +389,7 @@ export default function BannerSearchCard() {
             <button
               type="button"
               onClick={handleDetectLocation}
-              title="Detect my current location"
+              title={language === "ta" ? "எனது இருப்பிடத்தைக் கண்டறி" : "Detect my current location"}
               className="p-2 sm:p-2.5 rounded-full bg-sky-50 hover:bg-sky-100 text-sky-600 transition cursor-pointer relative"
             >
               <Crosshair className={`w-4 h-4 ${isDetectingLocation ? "animate-spin text-sky-700" : ""}`} />
@@ -384,7 +399,7 @@ export default function BannerSearchCard() {
             <button
               type="button"
               onClick={handleVoiceSearch}
-              title="Search by voice"
+              title={language === "ta" ? "குரல் மூலம் தேடுக" : "Search by voice"}
               className={`p-2 sm:p-2.5 rounded-full transition cursor-pointer ${
                 isVoiceListening 
                   ? "bg-rose-500 text-white animate-pulse" 
@@ -394,16 +409,52 @@ export default function BannerSearchCard() {
               <Mic className="w-4 h-4" />
             </button>
 
-            {/* Primary Search Button (Blue 99acres style) */}
+            {/* Primary Search Button */}
             <button
               type="submit"
-              className="bg-[#0066cc] hover:bg-[#0052a3] text-white font-black text-xs sm:text-sm px-5 sm:px-7 py-2 sm:py-2.5 rounded-lg shadow-sm hover:shadow transition cursor-pointer flex items-center justify-center gap-1.5"
+              className="bg-[#0c4a3e] hover:bg-[#072e27] text-white font-black text-xs sm:text-sm px-5 sm:px-7 py-2 sm:py-2.5 rounded-lg shadow-sm hover:shadow transition cursor-pointer flex items-center justify-center gap-1.5"
             >
-              <span>Search</span>
+              <span>{language === "ta" ? "தேடுக" : "Search"}</span>
             </button>
           </div>
         </div>
       </form>
+
+      {/* Quick Plot Searches Shortcut Strip */}
+      <div className="bg-[#f8fbf9] px-4 sm:px-6 py-2.5 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs rounded-b-2xl">
+        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+          <Compass className="w-3.5 h-3.5 text-[#0c4a3e]" />
+          <span>{language === "ta" ? "பிரபல மனைகள்:" : "Trending Plots:"}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => router.push("/plots?propertyType=RESIDENTIAL_PLOT")}
+          className="text-[11px] font-semibold text-[#0c4a3e] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full transition cursor-pointer"
+        >
+          ✓ {language === "ta" ? "DTCP வீட்டு மனைகள்" : "DTCP Villa Plots"}
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/properties?propertyType=AGRICULTURAL_LAND")}
+          className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full transition cursor-pointer"
+        >
+          🌾 {language === "ta" ? "விவசாய நிலங்கள்" : "Farmland & Acres"}
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/properties?propertyType=COMMERCIAL_PLOT")}
+          className="text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full transition cursor-pointer"
+        >
+          🛣️ {language === "ta" ? "ஹைவே வணிக மனைகள்" : "Highway Commercial Land"}
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/plots?maxPrice=2500000")}
+          className="text-[11px] font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full transition cursor-pointer"
+        >
+          ⚡ {language === "ta" ? "₹25 லட்சத்திற்குள் மனைகள்" : "Plots Under ₹25 Lac"}
+        </button>
+      </div>
     </div>
   );
 }

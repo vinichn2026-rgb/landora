@@ -34,8 +34,9 @@ const CATEGORY_IMAGE_MAP: Record<string, string> = {
 };
 
 export default async function HomePage() {
-  // Query actual properties from database via central data-access layer
+  // Query actual properties from database via central data-access layer (Plots #1 Priority)
   const featuredProperties = await DataAccess.getFeaturedProperties(6);
+  const featuredPlots = await DataAccess.getFeaturedPlots(4);
   const recentProperties = await DataAccess.getRecentProperties(4);
 
   return (
@@ -43,17 +44,17 @@ export default async function HomePage() {
       {/* SECTION 1: Navigation Header (Merged transparently at top, turns fixed on scroll) */}
       <Header currentCity="Coimbatore" />
 
-      {/* SECTION 2: 99acres-Style Panoramic Hero Banner (Daylight Pleasant View) */}
+      {/* SECTION 2: 99acres-Style Panoramic Hero Banner (Plots as First Priority) */}
       <section className="relative text-slate-900 pt-24 sm:pt-28 lg:pt-32 pb-24 sm:pb-28 lg:pb-36 overflow-hidden">
         {/* Scenic daylight landscape background photo with soft pleasant wash */}
         <div 
           className="absolute inset-0 bg-cover bg-center"
           style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=1600&auto=format&fit=crop')`
+            backgroundImage: `url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600&auto=format&fit=crop')`
           }}
         />
-        {/* Soft daylight overlay: white & airy emerald/sky tint */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#fbfdfc]/95 via-[#f4faf6]/88 to-[#ebf4fa]/80" />
+        {/* Soft daylight overlay: white & airy emerald tint */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#fbfdfc]/95 via-[#f4faf6]/90 to-[#ebf4fa]/85" />
         <div className="absolute top-0 right-0 w-[500px] h-[350px] bg-sky-200/25 blur-[100px] rounded-full pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[500px] h-[350px] bg-emerald-200/25 blur-[100px] rounded-full pointer-events-none" />
 
@@ -64,46 +65,49 @@ export default async function HomePage() {
             {/* Left Block: Partner Branding, Typography & Starting Price */}
             <div className="lg:col-span-4 text-center lg:text-left space-y-3">
               {/* Partner Inscription */}
-              <div className="inline-flex items-center gap-2 bg-[#0c4a3e]/10 backdrop-blur-md px-3 py-1 rounded-md border border-[#0c4a3e]/20 text-xs font-bold text-[#0c4a3e]">
+              <div className="inline-flex items-center gap-2 bg-[#0c4a3e]/10 backdrop-blur-md px-3 py-1.5 rounded-md border border-[#0c4a3e]/20 text-xs font-bold text-[#0c4a3e]">
                 <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                <span className="tracking-wider uppercase font-black">LANDORA SIGNATURE PRESENTS</span>
+                <span className="tracking-wider uppercase font-black">⭐ SOUTH INDIA&apos;S #1 PLOT MARKETPLACE</span>
               </div>
 
               {/* Bold Headline */}
               <div>
-                <div className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-none drop-shadow-2xs">
-                  3 BHK
+                <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-none drop-shadow-2xs">
+                  DTCP & RERA
                 </div>
-                <div className="text-sm sm:text-base font-extrabold uppercase tracking-widest text-[#0c4a3e] mt-1">
-                  PREMIUM RESIDENCES & VILLA PLOTS
+                <div className="text-sm sm:text-base font-extrabold uppercase tracking-widest text-[#0c4a3e] mt-1.5">
+                  APPROVED RESIDENTIAL & VILLA PLOTS
                 </div>
+                <p className="text-xs text-slate-600 font-medium mt-1">
+                  Gated community layouts, clear 30-year patta title & ready-to-build sites.
+                </p>
               </div>
 
               {/* Price Banner */}
               <div className="pt-2">
                 <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  STARTING PRICE AS
+                  PREMIUM PLOTS STARTING AS
                 </span>
                 <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
-                  <span className="text-[#0c4a3e]">₹38 Lakhs</span><span className="text-amber-500 text-lg font-bold">*</span> <span className="text-sm font-semibold text-slate-600">Onwards</span>
+                  <span className="text-[#0c4a3e]">₹18 Lakhs</span><span className="text-amber-500 text-lg font-bold">*</span> <span className="text-sm font-semibold text-slate-600">Onwards</span>
                 </div>
               </div>
             </div>
 
-            {/* Center Block: High-End Architectural Render */}
+            {/* Center Block: High-End Demarcated Layout Render */}
             <div className="lg:col-span-4 flex justify-center items-center">
               <div className="relative w-full max-w-[340px] sm:max-w-[400px] h-56 sm:h-64 rounded-2xl overflow-hidden shadow-2xl border-4 border-white group">
                 <div 
                   className="absolute inset-0 bg-cover bg-center group-hover:scale-105 transition-transform duration-700"
                   style={{ 
-                    backgroundImage: `url('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop')` 
+                    backgroundImage: `url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1200&auto=format&fit=crop')` 
                   }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/10" />
                 <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-[11px] text-white">
                   <span className="font-bold flex items-center gap-1 drop-shadow-sm">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    DTCP Approved Layout
+                    DTCP Layout No. 412/2026
                   </span>
                   <span className="text-amber-300 font-extrabold drop-shadow-sm">Ready to Register</span>
                 </div>
@@ -115,15 +119,13 @@ export default async function HomePage() {
               <div>
                 {/* Project Logo Motif */}
                 <div className="flex items-center justify-center lg:justify-start gap-2">
-                  <svg className="w-7 h-7 text-[#0c4a3e]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                  </svg>
+                  <Compass className="w-7 h-7 text-[#0c4a3e]" />
                   <div>
                     <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
-                      Emerald Palms Retreat
+                      Emerald Green Valley Township
                     </h3>
                     <p className="text-[11px] text-slate-600 font-semibold">
-                      BY LANDORA DEVELOPERS • Peelamedu & OMR Corridor
+                      BY LANDORA DEVELOPERS • Peelamedu & Saravanampatti IT Corridor
                     </p>
                   </div>
                 </div>
@@ -131,10 +133,10 @@ export default async function HomePage() {
                 {/* Slogan */}
                 <div className="mt-3">
                   <div className="text-lg sm:text-xl font-black tracking-widest text-[#0c4a3e] uppercase">
-                    LIFE AT EASE
+                    INVEST IN LAND, BUILD YOUR FUTURE
                   </div>
                   <p className="text-xs text-slate-600 font-medium">
-                    BREATHE FRESH AIR IN A LUSH GREEN DTCP & TN RERA APPROVED GATED COMMUNITY
+                    25-ACRE DTCP & TN RERA APPROVED GATED PLOT COMMUNITY WITH 40FT TAR ROADS
                   </p>
                 </div>
               </div>
@@ -148,8 +150,8 @@ export default async function HomePage() {
 
                 <div className="text-[10px] text-slate-700 leading-tight space-y-0.5">
                   <p className="font-bold text-slate-900">TN RERA Reg. No.: TN/01/Layout/2026/0412</p>
-                  <p className="text-slate-500">www.rera.tn.gov.in | Launch Date: 15.10.2026</p>
-                  <p className="text-emerald-700 font-bold">100% Clear 30-Yr Legal Title • Bank Approved</p>
+                  <p className="text-slate-500">DTCP Approved Layout | Ready for Immediate Registration</p>
+                  <p className="text-emerald-700 font-bold">100% Clear 30-Yr Legal Title • 80% Bank Loan</p>
                   <p className="text-slate-500">Approved by SBI, HDFC & ICICI Bank</p>
                 </div>
               </div>
@@ -216,6 +218,80 @@ export default async function HomePage() {
               </Link>
             );
           })}
+        </div>
+      </section>
+
+      {/* SECTION 4B: Dedicated Spotlight for Plots & Land (#1 Priority) */}
+      <section className="py-14 px-4 bg-[#f0f5f3] border-y border-[#d5e2dc]">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div>
+              <div className="inline-flex items-center gap-1.5 bg-[#0c4a3e] text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded tracking-wider mb-1.5">
+                <Compass className="w-3.5 h-3.5 text-[#c59b27]" />
+                <span>#1 Priority Category</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-[#132a24] tracking-tight">
+                Verified Plot Layouts & Farmland Parcels
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
+                DTCP & CMDA approved gated community plots, roadside farmland acreage, and ready-to-register sites with verified revenue patta.
+              </p>
+            </div>
+            <Link
+              href="/plots"
+              className="inline-flex items-center gap-2 bg-[#0c4a3e] hover:bg-[#072e27] text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs shrink-0"
+            >
+              <span>Explore All Plots & Land</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          {/* Plot Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {featuredPlots.map((plot) => (
+              <PropertyCard key={plot.id} property={plot} />
+            ))}
+          </div>
+
+          {/* Plot Assurance Bar */}
+          <div className="mt-8 bg-white rounded-2xl p-4 sm:p-5 border border-[#d5e2dc] shadow-xs grid grid-cols-2 md:grid-cols-4 gap-4 text-center sm:text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#0c4a3e] flex items-center justify-center font-bold shrink-0">
+                <Award className="w-5 h-5 text-[#c59b27]" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 leading-tight">DTCP / CMDA Approved</h4>
+                <p className="text-[10px] text-slate-500">Sanctioned layout numbers</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#0c4a3e] flex items-center justify-center font-bold shrink-0">
+                <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 leading-tight">30-Yr Clear Patta Title</h4>
+                <p className="text-[10px] text-slate-500">Nil encumbrance verification</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#0c4a3e] flex items-center justify-center font-bold shrink-0">
+                <Layers className="w-5 h-5 text-[#0c4a3e]" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 leading-tight">30ft & 40ft Tar Roads</h4>
+                <p className="text-[10px] text-slate-500">Demarcated boundary stones</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#0c4a3e] flex items-center justify-center font-bold shrink-0">
+                <Sparkles className="w-5 h-5 text-[#c59b27]" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 leading-tight">80% Bank Loan Approved</h4>
+                <p className="text-[10px] text-slate-500">SBI, HDFC, ICICI supported</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

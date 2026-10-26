@@ -145,7 +145,7 @@ export default function SellHubPage() {
               </div>
 
               <Link
-                href="/sell/form"
+                href="/post-property"
                 className="mt-6 text-xs font-bold text-[#005ca8] flex items-center gap-1 hover:underline"
               >
                 Continue listing <ArrowRight className="w-3.5 h-3.5" />

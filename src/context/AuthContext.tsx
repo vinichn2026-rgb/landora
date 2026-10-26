@@ -13,6 +13,14 @@ export interface AuthUser {
   profile?: any;
 }
 
+export interface AuthModalConfig {
+  title?: string;
+  subtitle?: string;
+  redirectTo?: string;
+  onSuccess?: () => void;
+  defaultEmail?: string;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
@@ -22,6 +30,7 @@ interface AuthContextType {
     success: boolean;
     emailSent?: boolean;
     providerConfigured?: boolean;
+    suggestedCode?: string;
     message?: string;
     error?: string;
     devNotice?: string;
@@ -45,6 +54,10 @@ interface AuthContextType {
   toggleSaveProperty: (propertyId: string) => Promise<{ isSaved: boolean; count: number }>;
   isSaved: (propertyId: string) => boolean;
   refreshUser: () => Promise<void>;
+  isAuthModalOpen: boolean;
+  authModalConfig: AuthModalConfig | null;
+  openAuthModal: (config?: AuthModalConfig) => void;
+  closeAuthModal: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,6 +66,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalConfig, setAuthModalConfig] = useState<AuthModalConfig | null>(null);
+
+  const openAuthModal = (config?: AuthModalConfig) => {
+    setAuthModalConfig(config || null);
+    setIsAuthModalOpen(true);
+  };
+
+  const closeAuthModal = () => {
+    setIsAuthModalOpen(false);
+    setAuthModalConfig(null);
+  };
 
   // Load initial session on mount
   useEffect(() => {
@@ -248,7 +273,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const toggleSaveProperty = async (propertyId: string) => {
     if (!user) {
-      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      openAuthModal({
+        title: "Save Property to Favorites",
+        subtitle: "Enter your email & OTP to shortlist this listing and receive price alerts.",
+        onSuccess: async () => {
+          try {
+            const res = await fetch("/api/user/saved-properties", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ propertyId }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              setSavedIds(prev => data.isSaved ? [...prev, propertyId] : prev.filter(id => id !== propertyId));
+            }
+          } catch {}
+        },
+      });
       return { isSaved: false, count: savedIds.length };
     }
 
@@ -307,6 +348,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         toggleSaveProperty,
         isSaved,
         refreshUser,
+        isAuthModalOpen,
+        authModalConfig,
+        openAuthModal,
+        closeAuthModal,
       }}
     >
       {children}

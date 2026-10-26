@@ -175,7 +175,10 @@ export const PropertyStore = {
       list = list.filter(p => p.verificationStatus === "INDEPENDENTLY_VERIFIED" || p.verificationStatus === "INFO_REVIEWED");
     }
 
-    // Sorting
+    // Sorting (Plot is our #1 priority)
+    const isPlotCategory = (type: string) => 
+      type === "RESIDENTIAL_PLOT" || type === "AGRICULTURAL_LAND" || type === "COMMERCIAL_PLOT" || type === "INDUSTRIAL";
+
     const sortBy = filters?.sortBy || "recommended";
     if (sortBy === "newest") {
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -186,8 +189,12 @@ export const PropertyStore = {
     } else if (sortBy === "area_desc") {
       list.sort((a, b) => normalizeAreaToSqft(b.area, b.areaUnit) - normalizeAreaToSqft(a.area, a.areaUnit));
     } else {
-      // Recommended: Featured first, then verified, then newest
+      // Recommended: Plots first (#1 priority), then Featured, then verified, then newest
       list.sort((a, b) => {
+        const aIsPlot = isPlotCategory(a.propertyType) ? 1 : 0;
+        const bIsPlot = isPlotCategory(b.propertyType) ? 1 : 0;
+        if (aIsPlot !== bIsPlot) return bIsPlot - aIsPlot; // Plot listings come first!
+
         if (a.isFeatured !== b.isFeatured) return a.isFeatured ? -1 : 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });

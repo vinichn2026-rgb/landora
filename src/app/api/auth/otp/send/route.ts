@@ -95,10 +95,11 @@ export async function POST(request: NextRequest) {
       success: true,
       emailSent: false,
       providerConfigured: false,
+      suggestedCode: otpResult.code,
       message: "Notice: Live email delivery service (RESEND_API_KEY / SMTP) is not configured in environment.",
       devNotice: isInitialAdmin
         ? "Live email provider is unconfigured. For this authorized account, use setup code 123456 or check server runtime logs."
-        : "Live email provider is unconfigured. Set RESEND_API_KEY or SMTP in environment variables to deliver emails.",
+        : `Test Mode Active: Your verification code is ${otpResult.code}. (Click to auto-fill)`,
       expiresInMinutes: otpResult.expiresInMinutes,
     });
   } catch (error) {

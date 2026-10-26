@@ -246,9 +246,27 @@ export const DataAccess = {
     return PropertyStore.getBySlug(slugOrId);
   },
 
-  // Get featured properties for homepage (Section C)
+  // Get featured properties for homepage (Plots prioritized as #1)
   async getFeaturedProperties(limit = 6): Promise<PropertyItem[]> {
-    const result = await this.getProperties({ limit });
+    const result = await this.getProperties({ limit: 20 });
+    const isPlotCategory = (type: string) => 
+      type === "RESIDENTIAL_PLOT" || type === "AGRICULTURAL_LAND" || type === "COMMERCIAL_PLOT" || type === "INDUSTRIAL";
+    const sorted = [...result.data].sort((a, b) => {
+      const aIsPlot = isPlotCategory(a.propertyType) ? 1 : 0;
+      const bIsPlot = isPlotCategory(b.propertyType) ? 1 : 0;
+      if (aIsPlot !== bIsPlot) return bIsPlot - aIsPlot;
+      if (a.isFeatured !== b.isFeatured) return a.isFeatured ? -1 : 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    return sorted.slice(0, limit);
+  },
+
+  // Get prime plots specifically for dedicated plot spotlight
+  async getFeaturedPlots(limit = 4): Promise<PropertyItem[]> {
+    const result = await this.getProperties({
+      categories: ["RESIDENTIAL_PLOT", "AGRICULTURAL_LAND", "COMMERCIAL_PLOT"],
+      limit
+    });
     return result.data.slice(0, limit);
   },
 

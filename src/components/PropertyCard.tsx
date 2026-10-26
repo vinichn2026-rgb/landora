@@ -24,7 +24,7 @@ export default function PropertyCard({
   onToggleSave,
   isSaved: propIsSaved 
 }: PropertyCardProps) {
-  const { user, isSaved: authIsSaved, toggleSaveProperty } = useAuth();
+  const { user, isSaved: authIsSaved, toggleSaveProperty, openAuthModal } = useAuth();
   const isHeartActive = propIsSaved !== undefined ? propIsSaved : authIsSaved(property.id);
 
   const handleSaveClick = async (e: React.MouseEvent) => {
@@ -33,10 +33,17 @@ export default function PropertyCard({
 
     // Action-based authentication: Require login to save favourites
     if (!user) {
-      if (typeof window !== "undefined") {
-        const currentUrl = window.location.pathname + window.location.search;
-        window.location.href = `/login?redirect=${encodeURIComponent(currentUrl)}&action=save&targetId=${property.id}`;
-      }
+      openAuthModal({
+        title: "Save Property to Favorites",
+        subtitle: `Login with Email & OTP to shortlist "${property.title}" and get instant price alerts.`,
+        onSuccess: async () => {
+          if (onToggleSave) {
+            onToggleSave(property.id);
+          } else {
+            await toggleSaveProperty(property.id);
+          }
+        },
+      });
       return;
     }
 
@@ -67,6 +74,21 @@ export default function PropertyCard({
 
         {/* Top Badges */}
         <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-1.5">
+          {property.propertyType === "RESIDENTIAL_PLOT" && (
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-md shadow-xs bg-[#0c4a3e] text-white border border-emerald-400/40">
+              PLOT / LAND
+            </span>
+          )}
+          {property.propertyType === "AGRICULTURAL_LAND" && (
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-md shadow-xs bg-emerald-800 text-white border border-emerald-400/40">
+              FARMLAND
+            </span>
+          )}
+          {property.propertyType === "COMMERCIAL_PLOT" && (
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-md shadow-xs bg-slate-900 text-amber-300 border border-amber-400/40">
+              COMMERCIAL PLOT
+            </span>
+          )}
           {property.isFeatured && (
             <Badge variant="gold" size="sm">
               FEATURED
@@ -126,15 +148,17 @@ export default function PropertyCard({
           {/* Quick Specifications */}
           <div className="mt-3 py-2 border-y border-[#f1f4f2] grid grid-cols-2 gap-2 text-xs text-slate-600">
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-bold">Property Type</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Type / Facing</span>
               <span className="font-semibold text-slate-800 truncate block">
-                {property.propertyType.replace(/_/g, " ")}
+                {property.propertyType.replace(/_/g, " ")}{property.facing ? ` • ${property.facing}` : ""}
               </span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-bold">Approval Status</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">
+                {property.roadWidthFt ? "Road & Approval" : "Approval Status"}
+              </span>
               <span className="font-semibold text-slate-800 truncate block">
-                {property.approvalStatus || "Seller Declared"}
+                {property.roadWidthFt ? `${property.roadWidthFt}ft Road • ` : ""}{property.approvalStatus || "Seller Declared"}
               </span>
             </div>
           </div>

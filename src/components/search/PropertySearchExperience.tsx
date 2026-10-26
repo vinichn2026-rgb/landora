@@ -326,6 +326,59 @@ export default function PropertySearchExperience({
             </div>
           </div>
 
+          {/* Quick Category Bar (Plots First Priority) */}
+          <div className="flex items-center gap-2 pt-3 overflow-x-auto scrollbar-none text-xs">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+              Quick Select:
+            </span>
+            <button
+              type="button"
+              onClick={() => handleFilterChange({ ...filters, propertyType: "RESIDENTIAL_PLOT" })}
+              className={`px-3 py-1 rounded-full font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                filters.propertyType === "RESIDENTIAL_PLOT"
+                  ? "bg-[#0c4a3e] text-white shadow-xs"
+                  : "bg-emerald-50 text-[#0c4a3e] border border-emerald-200 hover:bg-emerald-100"
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5 text-[#c59b27]" />
+              <span>Residential Plots</span>
+              <span className="bg-[#c59b27] text-slate-950 text-[9px] px-1 rounded font-black">TOP</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFilterChange({ ...filters, propertyType: "AGRICULTURAL_LAND" })}
+              className={`px-3 py-1 rounded-full font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                filters.propertyType === "AGRICULTURAL_LAND"
+                  ? "bg-[#0c4a3e] text-white shadow-xs"
+                  : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+              }`}
+            >
+              <span>🌾 Farmland & Acres</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFilterChange({ ...filters, propertyType: "COMMERCIAL_PLOT" })}
+              className={`px-3 py-1 rounded-full font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                filters.propertyType === "COMMERCIAL_PLOT"
+                  ? "bg-[#0c4a3e] text-white shadow-xs"
+                  : "bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
+              }`}
+            >
+              <span>🛣️ Commercial Plots</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFilterChange({ ...filters, propertyType: "all" })}
+              className={`px-3 py-1 rounded-full font-bold whitespace-nowrap transition cursor-pointer ${
+                filters.propertyType === "all"
+                  ? "bg-slate-900 text-white"
+                  : "bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100"
+              }`}
+            >
+              All Types
+            </button>
+          </div>
+
           {/* Active Filter Chips */}
           <ActiveFilterChips
             city={filters.city}

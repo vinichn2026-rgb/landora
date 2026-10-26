@@ -49,7 +49,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
     notFound();
   }
 
-  const { user, isSaved: authIsSaved, toggleSaveProperty } = useAuth();
+  const { user, isSaved: authIsSaved, toggleSaveProperty, openAuthModal } = useAuth();
 
   // Interactive gallery state
   const [activeImageIdx, setActiveImageIdx] = useState(0);
@@ -139,9 +139,16 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
   // Toggle Save (Requires Login)
   const handleToggleSave = async () => {
     if (!user) {
-      if (typeof window !== "undefined") {
-        window.location.href = `/login?redirect=${encodeURIComponent(`/properties/${property.slug}`)}&action=save&targetId=${property.id}`;
-      }
+      openAuthModal({
+        title: "Save Property to Favorites",
+        subtitle: `Login with Email & OTP to shortlist "${property.title}" and receive price alerts.`,
+        onSuccess: async () => {
+          const res = await toggleSaveProperty(property.id);
+          setIsSaved(res.isSaved);
+          setActionNotice("Property successfully added to your shortlisted favourites!");
+          setTimeout(() => setActionNotice(null), 4000);
+        },
+      });
       return;
     }
     const res = await toggleSaveProperty(property.id);
@@ -162,9 +169,15 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ slug:
     setEnquiryError(null);
 
     if (!user) {
-      if (typeof window !== "undefined") {
-        window.location.href = `/login?redirect=${encodeURIComponent(`/properties/${property.slug}#enquire`)}&action=enquire`;
-      }
+      openAuthModal({
+        title: "Contact Property Owner / Agent",
+        subtitle: "Enter your email & OTP to verify your contact information and submit your enquiry.",
+        defaultEmail: enquiryEmail || undefined,
+        onSuccess: () => {
+          setActionNotice("Verified! Please click Send Enquiry to submit.");
+          setTimeout(() => setActionNotice(null), 4000);
+        },
+      });
       return;
     }
 

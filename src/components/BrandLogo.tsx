@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { APP_NAME } from "@/lib/constants";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface BrandLogoProps {
   className?: string;
@@ -13,6 +16,16 @@ export default function BrandLogo({
   size = "md" 
 }: BrandLogoProps) {
   const isDark = variant === "dark";
+
+  let tagline = "Property & Land";
+  try {
+    const { language } = useLanguage();
+    if (language === "ta") {
+      tagline = "நிலம் & சொத்துகள்";
+    }
+  } catch {
+    // Outside LanguageProvider fallback
+  }
 
   const sizeClasses = {
     sm: "text-lg",
@@ -43,7 +56,7 @@ export default function BrandLogo({
           {APP_NAME}<span className="text-[#c59b27]">.</span>
         </span>
         <span className={`text-[8.5px] font-bold uppercase tracking-widest leading-none mt-0.5 ${isDark ? "text-slate-500" : "text-emerald-200/80"}`}>
-          Property & Land
+          {tagline}
         </span>
       </div>
     </Link>

@@ -1,7 +1,13 @@
 export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Landora";
-export const APP_TAGLINE = "Find the Right Property. Build Your Future.";
-export const APP_SUBTITLE = "Discover land, plots, homes and commercial properties across India.";
+export const APP_TAGLINE = "India's #1 Marketplace for Plots & Land Parcels";
+export const APP_SUBTITLE = "Discover DTCP & CMDA approved layout plots, farmland acreage, and verified properties across South India.";
 export const APP_PRIMARY_CITY = "Coimbatore";
+
+// Support & WhatsApp Contacts
+export const SUPPORT_PHONE = process.env.NEXT_PUBLIC_SUPPORT_PHONE || "+914222345678";
+export const SUPPORT_PHONE_DISPLAY = "+91 422 2345678";
+export const SUPPORT_WHATSAPP = process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || "+919842212345";
+export const SUPPORT_WHATSAPP_DISPLAY = "+91 98422 12345";
 
 // Initial Authorised Administrator & Auth Settings
 export const INITIAL_ADMIN_EMAIL = process.env.INITIAL_ADMIN_EMAIL || "vinichn2026@gmail.com";
@@ -12,12 +18,12 @@ export const OTP_MAX_ATTEMPTS = 5;
 export const PROPERTY_CATEGORIES = [
   { id: "residential-plot", label: "Residential Plots", slug: "residential-plots", type: "RESIDENTIAL_PLOT", icon: "Compass" },
   { id: "agricultural-land", label: "Agricultural Land", slug: "agricultural-land", type: "AGRICULTURAL_LAND", icon: "Trees" },
+  { id: "commercial-plot", label: "Commercial Plots", slug: "commercial-plots", type: "COMMERCIAL_PLOT", icon: "Briefcase" },
+  { id: "industrial-land", label: "Industrial Land", slug: "industrial-land", type: "INDUSTRIAL", icon: "Factory" },
   { id: "independent-house", label: "Independent Houses", slug: "independent-houses", type: "HOUSE", icon: "Home" },
   { id: "apartment", label: "Apartments", slug: "apartments", type: "APARTMENT", icon: "Building2" },
   { id: "villa", label: "Villas", slug: "villas", type: "VILLA", icon: "Castle" },
-  { id: "commercial-plot", label: "Commercial Plots", slug: "commercial-plots", type: "COMMERCIAL_PLOT", icon: "Briefcase" },
   { id: "shop-office", label: "Shops and Offices", slug: "shops-and-offices", type: "COMMERCIAL_BUILDING", icon: "Store" },
-  { id: "industrial-land", label: "Industrial Land", slug: "industrial-land", type: "INDUSTRIAL", icon: "Factory" },
 ] as const;
 
 export const POPULAR_LOCATIONS = [
@@ -60,7 +66,7 @@ export const SELLER_TYPE_OPTIONS = [
 ] as const;
 
 export const SORT_OPTIONS = [
-  { value: "recommended", label: "Recommended" },
+  { value: "recommended", label: "Recommended (Plots First)" },
   { value: "newest", label: "Newest First" },
   { value: "price_asc", label: "Price: Low to High" },
   { value: "price_desc", label: "Price: High to Low" },
