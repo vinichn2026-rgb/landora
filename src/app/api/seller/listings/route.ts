@@ -79,6 +79,8 @@ export async function POST(request: NextRequest) {
       sellerEmail,
       sellerWhatsapp,
       isDraft,
+      idempotencyKey,
+      referenceNumber,
     } = body;
 
     // If user is not yet logged in with cookie, resolve or create account from seller contact details
@@ -163,9 +165,8 @@ export async function POST(request: NextRequest) {
     const effectiveSellerPhone = sellerPhone?.trim() || user.phoneNumber || "+91 94433 12345";
     const effectiveSellerEmail = sellerEmail?.trim() || user.email;
 
-    // Listing status:
-    // "Do not automatically publish listings when moderation is enabled. Save drafts when supported."
-    const status = isDraft ? "DRAFT" : "PENDING";
+    // Listing status: Phase 5 Workflow (DRAFT, SUBMITTED, PENDING_VERIFICATION, etc.)
+    const status = isDraft ? "DRAFT" : "SUBMITTED";
 
     // Format price per unit helper if omitted
     let computedPricePerUnit = pricePerUnit;
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
       computedPricePerUnit = `₹${rate.toLocaleString("en-IN")}/${u}`;
     }
 
-    // Create record via DataAccess layer
+    // Create record via DataAccess layer (Safe database persistence)
     const createdProperty = await DataAccess.createSellerProperty({
       title: (title || "Untitled Property Draft").trim(),
       description: (description || "Draft listing pending details.").trim(),
@@ -201,9 +202,11 @@ export async function POST(request: NextRequest) {
       city: city ? city.trim() : "Coimbatore",
       state: state || "Tamil Nadu",
       pinCode: pinCode ? String(pinCode).trim() : "641004",
-      status,
+      status: status as any,
       isFeatured: false,
       verificationStatus: "UNREVIEWED",
+      referenceNumber: referenceNumber || undefined,
+      idempotencyKey: idempotencyKey || undefined,
       sellerId: user.id,
       sellerName: effectiveSellerName,
       sellerType: effectiveSellerType,
@@ -301,15 +304,21 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      referenceId: createdProperty.referenceNumber || createdProperty.id,
+      referenceNumber: createdProperty.referenceNumber || createdProperty.id,
       message: isDraft 
         ? "Listing draft saved successfully." 
-        : "Property submitted successfully! Our moderation desk will review and publish it within 24 hours.",
+        : `Property submitted successfully with Reference #${createdProperty.referenceNumber || createdProperty.id}! Our moderation desk will review and publish it within 24 hours.`,
       listing: createdProperty,
     }, { status: 201 });
   } catch (error: any) {
     console.error("[API ERROR] POST /api/seller/listings:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to submit property listing." },
+      { 
+        success: false, 
+        retryable: true,
+        error: error.message || "Failed to save property to the database. Your entered details are safe; please tap Retry to submit again." 
+      },
       { status: 500 }
     );
   }

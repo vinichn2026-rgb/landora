@@ -145,6 +145,9 @@ export default function PropertyPublishWizard({
   const [submissionSuccess, setSubmissionSuccess] = useState(false);
   const [submittedProperty, setSubmittedProperty] = useState<PropertyItem | null>(null);
   const [submissionCode, setSubmissionCode] = useState<string>("");
+  const [submissionKey] = useState<string>(() => {
+    return `sub-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  });
   const [termsAccepted, setTermsAccepted] = useState(true);
 
   // Hidden file inputs for Camera and Gallery
@@ -542,6 +545,7 @@ export default function PropertyPublishWizard({
           transactionalWhatsapp: formData.transactionalWhatsapp,
           promotionalOffers: formData.promotionalOffers,
         },
+        idempotencyKey: submissionKey,
         isDraft: false,
       };
 
@@ -553,10 +557,12 @@ export default function PropertyPublishWizard({
 
       const data = await res.json();
 
-      if (data.success && data.property) {
-        setSubmittedProperty(data.property);
-        const code = `LAN-${Math.floor(100000 + Math.random() * 900000)}`;
-        setSubmissionCode(code);
+      if (data.success && (data.listing || data.property)) {
+        const savedItem = data.listing || data.property;
+        setSubmittedProperty(savedItem);
+        // Successful database save is the absolute source of truth
+        const refId = data.referenceId || data.referenceNumber || savedItem.referenceNumber || savedItem.id;
+        setSubmissionCode(refId);
         setSubmissionSuccess(true);
         // Clear saved draft on successful submission
         if (typeof window !== "undefined") {
@@ -564,10 +570,10 @@ export default function PropertyPublishWizard({
         }
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
-        setErrorMsg(data.error || "Failed to submit property listing. Please try again.");
+        setErrorMsg(data.error || "Failed to persist property details to the database. Your entered details are safe; please tap Retry below.");
       }
     } catch {
-      setErrorMsg("Network error. Please check your internet connection and retry.");
+      setErrorMsg("Network error during submission. Your entered details are safe; please tap 'Retry Submission' to safely save.");
     } finally {
       setIsSubmitting(false);
     }
@@ -635,9 +641,17 @@ export default function PropertyPublishWizard({
             <CheckCircle2 className="w-10 h-10 text-emerald-700" />
           </div>
 
-          <span className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 mb-2">
-            Reference ID: #{submissionCode}
-          </span>
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+            <span className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
+              Reference ID: #{submissionCode}
+            </span>
+            <span className="inline-block px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 text-[11px] font-bold border border-blue-200 uppercase tracking-wider">
+              Status: SUBMITTED
+            </span>
+            <span className="inline-block px-2.5 py-1 rounded-full bg-slate-50 text-slate-600 text-[11px] font-medium border border-slate-200">
+              ✓ Database Record Saved
+            </span>
+          </div>
 
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             {t("post.subSuccessTitle", "Property Submitted Successfully!")}
@@ -807,15 +821,26 @@ export default function PropertyPublishWizard({
         </div>
       </div>
 
-      {/* Global Validation Error Banner */}
+      {/* Global Validation & Network Failure Error Banner */}
       {errorMsg && (
         <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-start gap-3 animate-in fade-in">
           <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <span className="font-bold">
-              {language === "ta" ? "முக்கிய தகவல் தேவைப்படுகிறது:" : "Required Information Missing:"}
+              {language === "ta" ? "முக்கிய தகவல் அல்லது இணைப்பு பிழை:" : "Submission Notice:"}
             </span>
-            <p className="mt-0.5">{errorMsg}</p>
+            <p className="mt-0.5 leading-relaxed">{errorMsg}</p>
+            {step === 6 && (
+              <button
+                type="button"
+                onClick={handleSubmitListing}
+                disabled={isSubmitting}
+                className="mt-2.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? "animate-spin" : ""}`} />
+                <span>{language === "ta" ? "மீண்டும் சமர்ப்பிக்கவும் (Safe Retry)" : "Safe Retry Submission"}</span>
+              </button>
+            )}
           </div>
         </div>
       )}

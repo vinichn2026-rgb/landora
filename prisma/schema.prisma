@@ -44,11 +44,18 @@ enum PropertyCategoryType {
 }
 
 enum PropertyStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_VERIFICATION
+  NEEDS_MORE_INFORMATION
+  APPROVED
+  PUBLISHED
   ACTIVE
   PENDING
   REJECTED
   EXPIRED
   SOLD
+  RENTED
 }
 
 enum VerificationLevel {
@@ -212,6 +219,11 @@ model Property {
   sellerType          SellerType           @default(OWNER)
   packageId           String?
   package             ListingPackage?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  referenceNumber     String?              @unique
+  submittedAt         DateTime?            @default(now())
+  verifiedAt          DateTime?
+  verificationNotes   String?              @db.Text
+  idempotencyKey      String?              @unique
   publishedAt         DateTime             @default(now())
   expiresAt           DateTime?
   createdAt           DateTime             @default(now())
@@ -223,7 +235,10 @@ model Property {
   enquiries           Enquiry[]
   reports             PropertyReport[]
   verificationRecords VerificationRecord[]
+  deliveryLogs        NotificationDeliveryLog[]
 
+  @@index([referenceNumber])
+  @@index([idempotencyKey])
   @@index([city])
   @@index([locality])
   @@index([propertyType])
@@ -487,6 +502,8 @@ model NotificationDeliveryLog {
   id                String    @id @default(cuid())
   userId            String?
   user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  propertyId        String?
+  property          Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   recipientPhone    String
   channel           String    // SMS, WHATSAPP, EMAIL
   eventType         String    // PROPERTY_SUBMITTED, VERIFICATION_PENDING, PROPERTY_APPROVED, etc.
@@ -501,6 +518,7 @@ model NotificationDeliveryLog {
   deliveredAt       DateTime?
   createdAt         DateTime  @default(now())
 
+  @@index([propertyId])
   @@index([recipientPhone])
   @@index([userId])
   @@index([eventType])

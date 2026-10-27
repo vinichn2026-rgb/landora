@@ -22,11 +22,17 @@ export type VerificationLevel =
 
 export type PropertyStatus = 
   | "DRAFT" 
+  | "SUBMITTED"
+  | "PENDING_VERIFICATION"
+  | "NEEDS_MORE_INFORMATION"
+  | "APPROVED"
+  | "PUBLISHED"
   | "PENDING" 
   | "ACTIVE" 
   | "REJECTED" 
   | "EXPIRED" 
   | "SOLD" 
+  | "RENTED"
   | "DEACTIVATED";
 
 export interface PropertyImageItem {
@@ -69,6 +75,11 @@ export interface PropertyItem {
   pinCode: string;
   latitude?: number;
   longitude?: number;
+  referenceNumber?: string;
+  submittedAt?: string;
+  verifiedAt?: string;
+  verificationNotes?: string;
+  idempotencyKey?: string;
   status: PropertyStatus;
   isFeatured: boolean;
   verificationStatus: VerificationLevel;

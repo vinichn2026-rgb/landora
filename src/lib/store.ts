@@ -252,6 +252,19 @@ export const PropertyStore = {
     return properties.find(p => p.slug === slugOrId || p.id === slugOrId) || null;
   },
 
+  // Get property by human-readable reference number (e.g. LND-849204)
+  getByReferenceNumber(refNumber: string): PropertyItem | null {
+    const properties = globalThis.__landora_properties || [];
+    return properties.find(p => p.referenceNumber === refNumber || p.id === refNumber) || null;
+  },
+
+  // Get property by client idempotency key to prevent duplicate submissions
+  getByIdempotencyKey(key: string): PropertyItem | null {
+    if (!key) return null;
+    const properties = globalThis.__landora_properties || [];
+    return properties.find(p => p.idempotencyKey === key) || null;
+  },
+
   // Get similar properties (same city or property type, excluding self)
   getSimilar(currentProperty: PropertyItem, limit = 3): PropertyItem[] {
     const properties = globalThis.__landora_properties || [];
@@ -268,8 +281,12 @@ export const PropertyStore = {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "") + `-${id.slice(-4)}`;
 
+    const refNum = data.referenceNumber || `LND-${Math.floor(100000 + Math.random() * 900000)}`;
+
     const newProp: PropertyItem = {
       ...data,
+      referenceNumber: refNum,
+      submittedAt: data.submittedAt || new Date().toISOString(),
       id,
       slug,
       viewsCount: 1,
@@ -1056,6 +1073,7 @@ export const CommunicationConsentStore = {
 export interface NotificationDeliveryLogItem {
   id: string;
   userId?: string | null;
+  propertyId?: string | null;
   recipientPhone: string;
   channel: "SMS" | "WHATSAPP" | "EMAIL";
   eventType: string;
@@ -1106,6 +1124,11 @@ export const NotificationDeliveryLogStore = {
     const digits = phone.replace(/\D/g, "").slice(-10);
     const list = globalThis.__landora_delivery_logs || [];
     return list.filter(l => l.recipientPhone.replace(/\D/g, "").slice(-10) === digits);
+  },
+
+  getByProperty(propertyId: string): NotificationDeliveryLogItem[] {
+    const list = globalThis.__landora_delivery_logs || [];
+    return list.filter(l => l.propertyId === propertyId);
   }
 };
 

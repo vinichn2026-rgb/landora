@@ -111,6 +111,7 @@ export const NotificationService = {
 
         await DataAccess.logNotificationDelivery({
           userId: params.userId,
+          propertyId: params.propertyId,
           recipientPhone: norm.e164,
           channel: "WHATSAPP",
           eventType,
@@ -138,6 +139,7 @@ export const NotificationService = {
 
         await DataAccess.logNotificationDelivery({
           userId: params.userId,
+          propertyId: params.propertyId,
           recipientPhone: norm.e164,
           channel: "SMS",
           eventType,

@@ -89,6 +89,11 @@ export function mapPrismaPropertyToItem(record: any): PropertyItem {
     status: record.status as PropertyStatus,
     isFeatured: record.isFeatured,
     verificationStatus: record.verificationStatus as VerificationLevel,
+    referenceNumber: record.referenceNumber || undefined,
+    submittedAt: record.submittedAt ? new Date(record.submittedAt).toISOString() : undefined,
+    verifiedAt: record.verifiedAt ? new Date(record.verifiedAt).toISOString() : undefined,
+    verificationNotes: record.verificationNotes || undefined,
+    idempotencyKey: record.idempotencyKey || undefined,
     sellerId: record.ownerId || "owner-01",
     sellerName: record.owner?.name || "Landowner",
     sellerType: record.sellerType || "OWNER",
@@ -1099,8 +1104,56 @@ export const DataAccess = {
     return list.find(p => p.id === id) || null;
   },
 
+  async getPropertyByReferenceNumber(refNumber: string): Promise<PropertyItem | null> {
+    if (process.env.DATABASE_URL) {
+      try {
+        const record = await prisma.property.findFirst({
+          where: {
+            OR: [
+              { referenceNumber: refNumber },
+              { id: refNumber },
+              { slug: refNumber }
+            ]
+          },
+          include: {
+            images: { orderBy: { order: "asc" } },
+            amenities: true,
+            owner: { select: { id: true, name: true, phoneNumber: true, email: true } },
+          },
+        });
+        if (record) return mapPrismaPropertyToItem(record);
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getPropertyByReferenceNumber error:", err);
+      }
+    }
+    return PropertyStore.getByReferenceNumber(refNumber);
+  },
+
   async createSellerProperty(data: Omit<PropertyItem, "id" | "slug" | "viewsCount" | "publishedAt" | "createdAt" | "updatedAt">): Promise<PropertyItem> {
-    // Prevent duplicate submissions within short period
+    // 1. Idempotency Check (Safeguards against retries after network drop)
+    if (data.idempotencyKey) {
+      if (process.env.DATABASE_URL) {
+        try {
+          const existing = await prisma.property.findUnique({
+            where: { idempotencyKey: data.idempotencyKey },
+            include: {
+              images: { orderBy: { order: "asc" } },
+              amenities: true,
+              owner: { select: { id: true, name: true, phoneNumber: true, email: true } },
+            },
+          });
+          if (existing) {
+            return mapPrismaPropertyToItem(existing);
+          }
+        } catch (err) {
+          console.warn("[DATA-ACCESS WARNING] PostgreSQL idempotency lookup error:", err);
+        }
+      }
+      const memoryExisting = PropertyStore.getByIdempotencyKey(data.idempotencyKey);
+      if (memoryExisting) return memoryExisting;
+    }
+
+    // 2. Prevent duplicate submissions within short period
     const existingProps = await this.getSellerProperties(data.sellerId);
     const duplicate = existingProps.find(p => 
       p.title.toLowerCase().trim() === data.title.toLowerCase().trim() &&
@@ -1112,12 +1165,18 @@ export const DataAccess = {
       throw new Error("Duplicate listing detected: A property with the same title, price, and location already exists in your account.");
     }
 
+    const refNumber = data.referenceNumber || `LND-${Math.floor(100000 + Math.random() * 900000)}`;
+
     if (process.env.DATABASE_URL) {
       try {
         const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + `-${Date.now().toString().slice(-4)}`;
         const record = await prisma.property.create({
           data: {
             slug,
+            referenceNumber: refNumber,
+            idempotencyKey: data.idempotencyKey || null,
+            submittedAt: new Date(),
+            verificationNotes: data.verificationNotes || null,
             title: data.title,
             description: data.description,
             listingType: data.listingType,
@@ -1142,7 +1201,7 @@ export const DataAccess = {
             city: data.city,
             state: data.state || "Tamil Nadu",
             pinCode: data.pinCode,
-            status: data.status === "DRAFT" ? "PENDING" : data.status as any,
+            status: data.status as any,
             ownerId: data.sellerId,
             sellerType: data.sellerType,
             images: {
@@ -1169,7 +1228,10 @@ export const DataAccess = {
       }
     }
 
-    return PropertyStore.create(data);
+    return PropertyStore.create({
+      ...data,
+      referenceNumber: refNumber,
+    });
   },
 
   async updateSellerProperty(id: string, userId: string, updates: Partial<PropertyItem>, userRole?: string): Promise<PropertyItem> {
@@ -2183,6 +2245,7 @@ export const DataAccess = {
 
   async logNotificationDelivery(data: {
     userId?: string | null;
+    propertyId?: string | null;
     recipientPhone: string;
     channel: "SMS" | "WHATSAPP" | "EMAIL";
     eventType: string;
@@ -2201,6 +2264,7 @@ export const DataAccess = {
         return await prisma.notificationDeliveryLog.create({
           data: {
             userId: data.userId || null,
+            propertyId: data.propertyId || null,
             recipientPhone: data.recipientPhone,
             channel: data.channel,
             eventType: data.eventType,
@@ -2224,6 +2288,20 @@ export const DataAccess = {
       sentAt: data.sentAt ? data.sentAt.toISOString() : null,
       deliveredAt: data.deliveredAt ? data.deliveredAt.toISOString() : null,
     });
+  },
+
+  async getPropertyNotificationHistory(propertyId: string) {
+    if (process.env.DATABASE_URL) {
+      try {
+        return await prisma.notificationDeliveryLog.findMany({
+          where: { propertyId },
+          orderBy: { createdAt: "desc" },
+        });
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getPropertyNotificationHistory error:", err);
+      }
+    }
+    return NotificationDeliveryLogStore.getByProperty(propertyId);
   },
 
   async withdrawCommunicationConsent(phoneOrUserId: string, reason = "User requested withdrawal of communication consent"): Promise<boolean> {
