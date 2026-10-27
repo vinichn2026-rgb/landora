@@ -2225,4 +2225,94 @@ export const DataAccess = {
       deliveredAt: data.deliveredAt ? data.deliveredAt.toISOString() : null,
     });
   },
+
+  async withdrawCommunicationConsent(phoneOrUserId: string, reason = "User requested withdrawal of communication consent"): Promise<boolean> {
+    const now = new Date();
+    if (process.env.DATABASE_URL) {
+      try {
+        const isPhone = phoneOrUserId.startsWith("+") || /^\d{10,}$/.test(phoneOrUserId.replace(/\D/g, ""));
+        if (isPhone) {
+          const digits = phoneOrUserId.replace(/\D/g, "").slice(-10);
+          await prisma.communicationConsent.updateMany({
+            where: {
+              OR: [
+                { phoneNumber: phoneOrUserId },
+                { phoneNumber: `+91${digits}` },
+                { phoneNumber: digits },
+              ],
+            },
+            data: {
+              transactionalSms: false,
+              transactionalWhatsapp: false,
+              promotionalOffers: false,
+              optOutTimestamp: now,
+              optOutReason: reason,
+            },
+          });
+        } else {
+          await prisma.communicationConsent.updateMany({
+            where: { userId: phoneOrUserId },
+            data: {
+              transactionalSms: false,
+              transactionalWhatsapp: false,
+              promotionalOffers: false,
+              optOutTimestamp: now,
+              optOutReason: reason,
+            },
+          });
+        }
+        return true;
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL withdrawCommunicationConsent error:", err);
+      }
+    }
+    return CommunicationConsentStore.optOut(phoneOrUserId, reason);
+  },
+
+  async updateNotificationDeliveryStatus(
+    providerMessageId: string,
+    status: "PENDING" | "QUEUED" | "SENT" | "DELIVERED" | "FAILED",
+    options?: { deliveryResult?: string; errorInfo?: string; deliveredAt?: Date }
+  ): Promise<boolean> {
+    if (process.env.DATABASE_URL) {
+      try {
+        await prisma.notificationDeliveryLog.updateMany({
+          where: { providerMessageId },
+          data: {
+            status,
+            ...(options?.deliveryResult ? { deliveryResult: options.deliveryResult } : {}),
+            ...(options?.errorInfo ? { errorInfo: options.errorInfo } : {}),
+            ...(options?.deliveredAt ? { deliveredAt: options.deliveredAt } : {}),
+          },
+        });
+        return true;
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL updateNotificationDeliveryStatus error:", err);
+      }
+    }
+    const updated = NotificationDeliveryLogStore.updateStatusByProviderId(providerMessageId, status, {
+      deliveryResult: options?.deliveryResult,
+      errorInfo: options?.errorInfo,
+      deliveredAt: options?.deliveredAt ? options.deliveredAt.toISOString() : null,
+    });
+    return !!updated;
+  },
+
+  async getNotificationDeliveryLogs(recipientPhone?: string, limit = 50) {
+    if (process.env.DATABASE_URL) {
+      try {
+        const whereClause = recipientPhone ? { recipientPhone } : {};
+        return await prisma.notificationDeliveryLog.findMany({
+          where: whereClause,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+        });
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getNotificationDeliveryLogs error:", err);
+      }
+    }
+    return recipientPhone
+      ? NotificationDeliveryLogStore.getByRecipient(recipientPhone)
+      : NotificationDeliveryLogStore.getAll(limit);
+  },
 };

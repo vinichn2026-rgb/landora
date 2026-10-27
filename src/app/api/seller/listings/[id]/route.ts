@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSessionUser } from "@/lib/auth";
 import { DataAccess } from "@/lib/data-access";
+import { NotificationService } from "@/lib/notification-service";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -117,6 +118,26 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       user.role,
       rejectionReason
     );
+
+    // Automated Transactional Notification (SMS & WhatsApp per consent)
+    if (updated?.sellerPhone) {
+      if (status === "ACTIVE") {
+        NotificationService.notifyPropertyPublished({
+          userId: updated.sellerId,
+          phone: updated.sellerPhone,
+          propertyId: updated.id,
+          propertyTitle: updated.title,
+        }).catch(err => console.error("[NOTIF] notifyPropertyPublished error:", err));
+      } else {
+        NotificationService.notifyStatusChanged({
+          userId: updated.sellerId,
+          phone: updated.sellerPhone,
+          propertyId: updated.id,
+          propertyTitle: updated.title,
+          extraInfo: status,
+        }).catch(err => console.error("[NOTIF] notifyStatusChanged error:", err));
+      }
+    }
 
     return NextResponse.json({
       success: true,

@@ -31,25 +31,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newStatus = action.toUpperCase() === "APPROVE" ? "ACTIVE" : "REJECTED";
+    let newStatus: any = "PENDING";
+    const actUpper = action.toUpperCase();
+
+    if (actUpper === "APPROVE") {
+      newStatus = "ACTIVE";
+    } else if (actUpper === "REJECT" || actUpper === "DETAILS_REQUIRED") {
+      newStatus = "REJECTED";
+    } else if (actUpper === "VERIFY" || actUpper === "VERIFICATION_PENDING") {
+      newStatus = "PENDING";
+    }
 
     const updated = await DataAccess.setListingStatus(
       propertyId,
       user.id,
       newStatus,
       user.role,
-      action.toUpperCase() === "REJECT" ? (rejectionReason || "Listing details or documentation incomplete.") : undefined
+      (actUpper === "REJECT" || actUpper === "DETAILS_REQUIRED")
+        ? (rejectionReason || "Listing details or documentation incomplete.")
+        : undefined
     );
 
     // Automated Transactional Notification (SMS & WhatsApp per consent)
     if (updated?.sellerPhone) {
-      if (newStatus === "ACTIVE") {
+      if (actUpper === "APPROVE") {
         NotificationService.notifyPropertyApproved({
           userId: updated.sellerId,
           phone: updated.sellerPhone,
           propertyId: updated.id,
           propertyTitle: updated.title,
         }).catch(err => console.error("[NOTIF] notifyPropertyApproved error:", err));
+
+        NotificationService.notifyPropertyPublished({
+          userId: updated.sellerId,
+          phone: updated.sellerPhone,
+          propertyId: updated.id,
+          propertyTitle: updated.title,
+        }).catch(err => console.error("[NOTIF] notifyPropertyPublished error:", err));
+      } else if (actUpper === "VERIFY" || actUpper === "VERIFICATION_PENDING") {
+        NotificationService.notifyVerificationPending({
+          userId: updated.sellerId,
+          phone: updated.sellerPhone,
+          propertyId: updated.id,
+          propertyTitle: updated.title,
+        }).catch(err => console.error("[NOTIF] notifyVerificationPending error:", err));
       } else {
         NotificationService.notifyDetailsRequired({
           userId: updated.sellerId,

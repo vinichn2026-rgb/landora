@@ -1037,8 +1037,8 @@ export const CommunicationConsentStore = {
     return newItem;
   },
 
-  optOut(phone: string, reason = "User requested opt-out"): boolean {
-    const existing = this.findByPhone(phone);
+  optOut(phoneOrUserId: string, reason = "User requested withdrawal of communication consent"): boolean {
+    const existing = this.findByPhone(phoneOrUserId) || this.findByUserId(phoneOrUserId);
     if (!existing) return false;
     existing.transactionalSms = false;
     existing.transactionalWhatsapp = false;
@@ -1079,6 +1079,21 @@ export const NotificationDeliveryLogStore = {
       createdAt: new Date().toISOString(),
     };
     globalThis.__landora_delivery_logs = [item, ...(globalThis.__landora_delivery_logs || [])];
+    return item;
+  },
+
+  updateStatusByProviderId(
+    providerMessageId: string,
+    status: "PENDING" | "QUEUED" | "SENT" | "DELIVERED" | "FAILED",
+    options?: { deliveryResult?: string | null; errorInfo?: string | null; deliveredAt?: string | null }
+  ): NotificationDeliveryLogItem | null {
+    const list = globalThis.__landora_delivery_logs || [];
+    const item = list.find(l => l.providerMessageId === providerMessageId);
+    if (!item) return null;
+    item.status = status;
+    if (options?.deliveryResult !== undefined) item.deliveryResult = options.deliveryResult;
+    if (options?.errorInfo !== undefined) item.errorInfo = options.errorInfo;
+    if (options?.deliveredAt !== undefined) item.deliveredAt = options.deliveredAt;
     return item;
   },
 

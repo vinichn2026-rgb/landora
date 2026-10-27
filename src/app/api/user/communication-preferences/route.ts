@@ -9,8 +9,9 @@ export async function GET(request: NextRequest) {
     const user = await getServerSessionUser();
     const { searchParams } = new URL(request.url);
     const phoneParam = searchParams.get("phone");
+    const normalizedPhone = phoneParam ? normalizePhoneNumber(phoneParam).e164 : (user?.phoneNumber || null);
 
-    const identifier = user?.id || (phoneParam ? normalizePhoneNumber(phoneParam).e164 : null);
+    const identifier = user?.id || normalizedPhone;
     if (!identifier) {
       return NextResponse.json(
         { success: false, error: "Please provide a user session or phone number." },
@@ -23,11 +24,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       preferences: {
+        phoneNumber: consent ? consent.phoneNumber : normalizedPhone,
         transactionalSms: consent ? consent.transactionalSms : true,
         transactionalWhatsapp: consent ? consent.transactionalWhatsapp : true,
         promotionalOffers: consent ? consent.promotionalOffers : false, // strictly false by default
         consentTimestamp: consent ? consent.consentTimestamp : null,
+        consentSource: consent ? consent.consentSource : null,
         optOutTimestamp: consent ? consent.optOutTimestamp : null,
+        optOutReason: consent ? consent.optOutReason : null,
       },
     });
   } catch (error: any) {
@@ -45,6 +49,9 @@ export async function POST(request: NextRequest) {
     const user = await getServerSessionUser();
     const body = await request.json();
     const {
+      action,
+      withdrawConsent,
+      reason,
       phone,
       phoneNumber,
       transactionalSms,
@@ -67,6 +74,25 @@ export async function POST(request: NextRequest) {
         { success: false, error: "Invalid mobile number format." },
         { status: 400 }
       );
+    }
+
+    // Explicit opt-out / consent withdrawal
+    if (action === "withdraw" || withdrawConsent === true) {
+      await DataAccess.withdrawCommunicationConsent(
+        norm.e164,
+        reason || "User requested full withdrawal of communication consent"
+      );
+      return NextResponse.json({
+        success: true,
+        message: "You have successfully withdrawn communication consent. All future SMS and WhatsApp alerts have been paused.",
+        preferences: {
+          transactionalSms: false,
+          transactionalWhatsapp: false,
+          promotionalOffers: false,
+          optOutTimestamp: new Date().toISOString(),
+          optOutReason: reason || "User requested full withdrawal of communication consent",
+        },
+      });
     }
 
     const savedConsent = await DataAccess.saveCommunicationConsent({

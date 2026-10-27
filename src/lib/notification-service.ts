@@ -35,6 +35,16 @@ export const NotificationService = {
 
     // 1. Fetch user communication consent
     const consent = await DataAccess.getCommunicationConsent(params.userId || norm.e164);
+
+    // Strictly respect opt-out / consent withdrawal
+    if (consent?.optOutTimestamp) {
+      return {
+        smsSent: false,
+        whatsappSent: false,
+        errors: ["Notification skipped: Recipient has withdrawn communication consent (Opted out)."],
+      };
+    }
+
     const allowSms = consent ? consent.transactionalSms : true; // Default true for critical transactional
     const allowWhatsapp = consent ? consent.transactionalWhatsapp : true;
 
@@ -200,5 +210,51 @@ export const NotificationService = {
    */
   async notifyNewInquiry(params: PropertyNotificationParams) {
     return this.dispatchEventNotification("NEW_INQUIRY", params);
+  },
+
+  /**
+   * Helper: Promotional Property Offers & Announcements
+   * Strictly requires explicit promotional consent!
+   */
+  async notifyPromotionalOffer(params: {
+    userId?: string | null;
+    phone: string;
+    offerTitle: string;
+    offerMessage: string;
+  }): Promise<{ sent: boolean; reason?: string }> {
+    const norm = normalizePhoneNumber(params.phone);
+    if (!norm.isValid) return { sent: false, reason: "Invalid phone number" };
+
+    const consent = await DataAccess.getCommunicationConsent(params.userId || norm.e164);
+
+    // Strictly check promotional consent - NEVER send without explicit opt-in
+    if (!consent?.promotionalOffers) {
+      return {
+        sent: false,
+        reason: "Suppressed: User has not opted in to promotional communications (DPDP Act Compliance).",
+      };
+    }
+
+    if (consent.optOutTimestamp) {
+      return { sent: false, reason: "Suppressed: User has withdrawn communication consent." };
+    }
+
+    const message = `Landora Special Offer: ${params.offerTitle} - ${params.offerMessage}`;
+    const smsRes = await sendTransactionalSms(norm.e164, message);
+
+    await DataAccess.logNotificationDelivery({
+      userId: params.userId,
+      recipientPhone: norm.e164,
+      channel: "SMS",
+      eventType: "PROMOTIONAL_OFFER",
+      messageBody: message,
+      status: smsRes.success ? "SENT" : "FAILED",
+      provider: smsRes.provider,
+      providerMessageId: smsRes.messageId,
+      errorInfo: smsRes.error,
+      sentAt: smsRes.success ? new Date() : undefined,
+    });
+
+    return { sent: smsRes.success };
   },
 };
