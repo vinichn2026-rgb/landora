@@ -19,6 +19,10 @@ export interface AuthModalConfig {
   redirectTo?: string;
   onSuccess?: () => void;
   defaultEmail?: string;
+  defaultPhone?: string;
+  initialMethod?: "phone" | "email";
+  allowGuest?: boolean;
+  onGuestContinue?: () => void;
 }
 
 interface AuthContextType {
@@ -41,6 +45,22 @@ interface AuthContextType {
     user?: AuthUser;
     error?: string;
     redirectTo?: string;
+  }>;
+  sendMobileOtp: (phone: string) => Promise<{
+    success: boolean;
+    error?: string;
+    waitSeconds?: number;
+    message?: string;
+    providerConfigured?: boolean;
+  }>;
+  verifyMobileOtp: (
+    phone: string,
+    code: string,
+    options?: { name?: string; role?: UserRole; pendingPropertyId?: string }
+  ) => Promise<{
+    success: boolean;
+    user?: AuthUser;
+    error?: string;
   }>;
   register: (data: {
     name: string;
@@ -230,6 +250,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const sendMobileOtp = async (phone: string) => {
+    try {
+      const res = await fetch("/api/auth/mobile/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      return data;
+    } catch (err: any) {
+      console.error("[AUTH] sendMobileOtp error:", err);
+      return { 
+        success: false, 
+        error: "Network connection error while requesting mobile OTP." 
+      };
+    }
+  };
+
+  const verifyMobileOtp = async (
+    phone: string,
+    code: string,
+    options?: { name?: string; role?: UserRole; pendingPropertyId?: string }
+  ) => {
+    try {
+      const res = await fetch("/api/auth/mobile/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone,
+          code,
+          name: options?.name,
+          role: options?.role,
+          pendingPropertyId: options?.pendingPropertyId,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.user) {
+        setUser(data.user);
+        localStorage.setItem("landora_user", JSON.stringify(data.user));
+
+        try {
+          const savedRes = await fetch("/api/user/saved-properties");
+          const savedData = await savedRes.json();
+          if (savedData.success && savedData.savedIds) {
+            setSavedIds(savedData.savedIds);
+          }
+        } catch {}
+
+        return { success: true, user: data.user };
+      }
+      return { success: false, error: data.error || "Mobile verification failed." };
+    } catch (err: any) {
+      console.error("[AUTH] verifyMobileOtp error:", err);
+      return { 
+        success: false, 
+        error: "Network connection error while verifying mobile code." 
+      };
+    }
+  };
+
   const register = async (data: {
     name: string;
     email: string;
@@ -343,6 +424,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         sendOtp,
         verifyOtp,
+        sendMobileOtp,
+        verifyMobileOtp,
         register,
         logout,
         toggleSaveProperty,

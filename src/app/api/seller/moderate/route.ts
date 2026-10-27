@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSessionUser } from "@/lib/auth";
 import { DataAccess } from "@/lib/data-access";
+import { NotificationService } from "@/lib/notification-service";
 
 // POST /api/seller/moderate - Moderate property listing (Approve or Reject)
 export async function POST(request: NextRequest) {
@@ -39,6 +40,26 @@ export async function POST(request: NextRequest) {
       user.role,
       action.toUpperCase() === "REJECT" ? (rejectionReason || "Listing details or documentation incomplete.") : undefined
     );
+
+    // Automated Transactional Notification (SMS & WhatsApp per consent)
+    if (updated?.sellerPhone) {
+      if (newStatus === "ACTIVE") {
+        NotificationService.notifyPropertyApproved({
+          userId: updated.sellerId,
+          phone: updated.sellerPhone,
+          propertyId: updated.id,
+          propertyTitle: updated.title,
+        }).catch(err => console.error("[NOTIF] notifyPropertyApproved error:", err));
+      } else {
+        NotificationService.notifyDetailsRequired({
+          userId: updated.sellerId,
+          phone: updated.sellerPhone,
+          propertyId: updated.id,
+          propertyTitle: updated.title,
+          reason: rejectionReason || "Additional details required",
+        }).catch(err => console.error("[NOTIF] notifyDetailsRequired error:", err));
+      }
+    }
 
     return NextResponse.json({
       success: true,

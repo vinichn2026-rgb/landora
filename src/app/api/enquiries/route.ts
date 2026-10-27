@@ -4,6 +4,7 @@ import { applyRateLimit } from "@/lib/rate-limit";
 import { getServerSessionUser } from "@/lib/auth";
 import { INITIAL_ADMIN_EMAIL } from "@/lib/constants";
 import { sendAdminNewEnquiryNotificationEmail } from "@/lib/email";
+import { NotificationService } from "@/lib/notification-service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,6 +75,17 @@ export async function POST(request: NextRequest) {
           entityType: "ENQUIRY",
           entityId: result.enquiryId,
         });
+      }
+
+      // Automated Transactional Notification to Seller (SMS & WhatsApp per consent)
+      if (targetProperty?.sellerPhone) {
+        NotificationService.notifyNewInquiry({
+          userId: targetProperty.sellerId,
+          phone: targetProperty.sellerPhone,
+          propertyId,
+          propertyTitle: propTitle,
+          extraInfo: `${effectiveBuyerName} requested callback. Message: "${message.slice(0, 50)}"`,
+        }).catch(err => console.error("[NOTIF] notifyNewInquiry error:", err));
       }
 
       // Dispatch administrator notification email

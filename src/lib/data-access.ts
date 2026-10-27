@@ -34,7 +34,9 @@ import {
   LocationStore,
   ContentStore,
   PaymentStore,
-  LoginActivityStore
+  LoginActivityStore,
+  CommunicationConsentStore,
+  NotificationDeliveryLogStore
 } from "./store";
 import { normalizeAreaToSqft } from "./constants";
 import { 
@@ -576,6 +578,99 @@ export const DataAccess = {
       return this.ensureInitialAdminUser();
     }
     return found;
+  },
+
+  async findUserByPhone(phone: string): Promise<UserItem | null> {
+    const digits = phone.replace(/\D/g, "").slice(-10);
+    if (!digits || digits.length < 10) return null;
+
+    if (process.env.DATABASE_URL) {
+      try {
+        const user = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { phoneNumber: phone },
+              { phoneNumber: `+91${digits}` },
+              { phoneNumber: digits },
+            ],
+          },
+          include: { profile: true },
+        });
+        if (user) {
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            passwordHash: user.passwordHash,
+            role: user.role as UserRole,
+            createdAt: user.createdAt.toISOString(),
+            updatedAt: user.updatedAt.toISOString(),
+            profile: user.profile ? {
+              bio: user.profile.bio,
+              companyName: user.profile.companyName,
+              taxId: user.profile.taxId,
+              reraRegistration: user.profile.reraRegistration,
+              address: user.profile.address,
+              city: user.profile.city,
+              state: user.profile.state,
+              pinCode: user.profile.pinCode,
+              isPhoneVerified: user.profile.isPhoneVerified,
+              isEmailVerified: user.profile.isEmailVerified,
+            } : null,
+          };
+        }
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL findUserByPhone error:", err);
+      }
+    }
+
+    return UserStore.findByPhone(phone);
+  },
+
+  async markPhoneVerified(userId: string, phoneNumber: string): Promise<boolean> {
+    if (process.env.DATABASE_URL) {
+      try {
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            phoneNumber,
+            profile: {
+              upsert: {
+                create: { isPhoneVerified: true },
+                update: { isPhoneVerified: true },
+              },
+            },
+          },
+        });
+        return true;
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL markPhoneVerified error:", err);
+      }
+    }
+
+    const user = UserStore.findById(userId);
+    if (user) {
+      user.phoneNumber = phoneNumber;
+      if (!user.profile) {
+        user.profile = {
+          bio: null,
+          companyName: null,
+          taxId: null,
+          reraRegistration: null,
+          address: null,
+          city: "Coimbatore",
+          state: "Tamil Nadu",
+          pinCode: null,
+          isPhoneVerified: true,
+          isEmailVerified: false,
+        };
+      } else {
+        user.profile.isPhoneVerified = true;
+      }
+      return true;
+    }
+    return false;
   },
 
   async findUserById(id: string): Promise<UserItem | null> {
@@ -1130,6 +1225,27 @@ export const DataAccess = {
     const updated = PropertyStore.update(id, updates);
     if (!updated) throw new Error("Property update failed.");
     return updated;
+  },
+
+  async associatePropertyToUser(propertyId: string, userId: string, sellerPhone: string): Promise<boolean> {
+    if (process.env.DATABASE_URL) {
+      try {
+        await prisma.property.update({
+          where: { id: propertyId },
+          data: {
+            ownerId: userId,
+          },
+        });
+        return true;
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL associatePropertyToUser error:", err);
+      }
+    }
+    const updated = PropertyStore.update(propertyId, {
+      sellerId: userId,
+      sellerPhone: sellerPhone,
+    });
+    return !!updated;
   },
 
   async setListingStatus(id: string, userId: string, status: PropertyStatus, userRole?: string, rejectionReason?: string): Promise<PropertyItem> {
@@ -2000,5 +2116,113 @@ export const DataAccess = {
     }
 
     return updated;
+  },
+
+  async saveCommunicationConsent(data: {
+    userId?: string | null;
+    phoneNumber: string;
+    transactionalSms?: boolean;
+    transactionalWhatsapp?: boolean;
+    promotionalOffers?: boolean;
+    consentSource?: string;
+    ipAddress?: string | null;
+  }) {
+    if (process.env.DATABASE_URL) {
+      try {
+        const existing = await prisma.communicationConsent.findFirst({
+          where: { phoneNumber: data.phoneNumber },
+        });
+        if (existing) {
+          return await prisma.communicationConsent.update({
+            where: { id: existing.id },
+            data: {
+              userId: data.userId || existing.userId,
+              transactionalSms: data.transactionalSms ?? existing.transactionalSms,
+              transactionalWhatsapp: data.transactionalWhatsapp ?? existing.transactionalWhatsapp,
+              promotionalOffers: data.promotionalOffers ?? existing.promotionalOffers,
+              consentTimestamp: new Date(),
+            },
+          });
+        }
+        return await prisma.communicationConsent.create({
+          data: {
+            userId: data.userId || null,
+            phoneNumber: data.phoneNumber,
+            transactionalSms: data.transactionalSms ?? true,
+            transactionalWhatsapp: data.transactionalWhatsapp ?? true,
+            promotionalOffers: data.promotionalOffers ?? false,
+            consentSource: data.consentSource || "POST_PROPERTY_FORM",
+            ipAddress: data.ipAddress || null,
+          },
+        });
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL saveCommunicationConsent error:", err);
+      }
+    }
+    return CommunicationConsentStore.save(data);
+  },
+
+  async getCommunicationConsent(phoneOrUserId: string) {
+    if (process.env.DATABASE_URL) {
+      try {
+        const consent = await prisma.communicationConsent.findFirst({
+          where: {
+            OR: [
+              { phoneNumber: phoneOrUserId },
+              { userId: phoneOrUserId },
+            ],
+          },
+        });
+        if (consent) return consent;
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getCommunicationConsent error:", err);
+      }
+    }
+    return CommunicationConsentStore.findByPhone(phoneOrUserId) || CommunicationConsentStore.findByUserId(phoneOrUserId);
+  },
+
+  async logNotificationDelivery(data: {
+    userId?: string | null;
+    recipientPhone: string;
+    channel: "SMS" | "WHATSAPP" | "EMAIL";
+    eventType: string;
+    templateName?: string;
+    messageBody: string;
+    status: "PENDING" | "QUEUED" | "SENT" | "DELIVERED" | "FAILED";
+    provider?: string;
+    providerMessageId?: string;
+    deliveryResult?: string;
+    errorInfo?: string;
+    sentAt?: Date;
+    deliveredAt?: Date;
+  }) {
+    if (process.env.DATABASE_URL) {
+      try {
+        return await prisma.notificationDeliveryLog.create({
+          data: {
+            userId: data.userId || null,
+            recipientPhone: data.recipientPhone,
+            channel: data.channel,
+            eventType: data.eventType,
+            templateName: data.templateName || null,
+            messageBody: data.messageBody,
+            status: data.status,
+            provider: data.provider || null,
+            providerMessageId: data.providerMessageId || null,
+            deliveryResult: data.deliveryResult || null,
+            errorInfo: data.errorInfo || null,
+            sentAt: data.sentAt || null,
+            deliveredAt: data.deliveredAt || null,
+          },
+        });
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL logNotificationDelivery error:", err);
+      }
+    }
+    return NotificationDeliveryLogStore.create({
+      ...data,
+      sentAt: data.sentAt ? data.sentAt.toISOString() : null,
+      deliveredAt: data.deliveredAt ? data.deliveredAt.toISOString() : null,
+    });
   },
 };

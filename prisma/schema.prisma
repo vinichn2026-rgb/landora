@@ -110,6 +110,8 @@ model User {
   notifications     Notification[]
   auditLogs         AuditLog[]
   loginActivities   LoginActivity[]
+  communicationConsents CommunicationConsent[]
+  deliveryLogs          NotificationDeliveryLog[]
   lastLoginAt       DateTime?
 
   @@index([role])
@@ -454,3 +456,55 @@ model LoginActivity {
   @@index([email])
   @@index([createdAt])
 }
+
+// -----------------------------------------------------------------------------
+// USER COMMUNICATION PREFERENCES & CONSENT AUDIT (TRAI DLT & DPDP Compliant)
+// -----------------------------------------------------------------------------
+model CommunicationConsent {
+  id                    String    @id @default(cuid())
+  userId                String?
+  user                  User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber           String
+  transactionalSms      Boolean   @default(true)
+  transactionalWhatsapp Boolean   @default(true)
+  promotionalOffers     Boolean   @default(false)
+  consentTimestamp      DateTime  @default(now())
+  consentSource         String    @default("POST_PROPERTY_FORM")
+  optOutTimestamp       DateTime?
+  optOutReason          String?
+  ipAddress             String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([phoneNumber])
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// AUTOMATED SMS & WHATSAPP NOTIFICATION DELIVERY LOGS
+// -----------------------------------------------------------------------------
+model NotificationDeliveryLog {
+  id                String    @id @default(cuid())
+  userId            String?
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  recipientPhone    String
+  channel           String    // SMS, WHATSAPP, EMAIL
+  eventType         String    // PROPERTY_SUBMITTED, VERIFICATION_PENDING, PROPERTY_APPROVED, etc.
+  templateName      String?
+  messageBody       String    @db.Text
+  status            String    @default("PENDING") // PENDING, QUEUED, SENT, DELIVERED, FAILED
+  provider          String?   // TWILIO, MSG91, FAST2SMS, META_WHATSAPP, MOCK
+  providerMessageId String?
+  deliveryResult    String?   @db.Text
+  errorInfo         String?   @db.Text
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([recipientPhone])
+  @@index([userId])
+  @@index([eventType])
+  @@index([status])
+  @@index([createdAt])
+}
+

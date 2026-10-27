@@ -30,6 +30,8 @@ declare global {
   var __landora_content: ContentBannerItem[] | undefined;
   var __landora_payments: PaymentRecordItem[] | undefined;
   var __landora_login_activities: LoginActivityItem[] | undefined;
+  var __landora_communication_consents: CommunicationConsentItem[] | undefined;
+  var __landora_delivery_logs: NotificationDeliveryLogItem[] | undefined;
 }
 
 // Ensure in-memory store always has latest seed dataset
@@ -649,6 +651,17 @@ export const UserStore = {
     return list.find(u => u.email.toLowerCase() === email.toLowerCase().trim()) || null;
   },
 
+  findByPhone(phoneNumber: string): UserItem | null {
+    const digits = phoneNumber.replace(/\D/g, "").slice(-10);
+    if (!digits || digits.length < 10) return null;
+    const list = globalThis.__landora_users || [];
+    return list.find(u => {
+      if (!u.phoneNumber) return false;
+      const uDigits = u.phoneNumber.replace(/\D/g, "").slice(-10);
+      return uDigits === digits;
+    }) || null;
+  },
+
   findById(id: string): UserItem | null {
     const list = globalThis.__landora_users || [];
     return list.find(u => u.id === id) || null;
@@ -949,3 +962,135 @@ export const LoginActivityStore = {
     return list.filter(a => a.userId === userId);
   }
 };
+
+// -----------------------------------------------------------------------------
+// COMMUNICATION CONSENT STORE (TRAI DLT & DPDP Compliant)
+// -----------------------------------------------------------------------------
+export interface CommunicationConsentItem {
+  id: string;
+  userId?: string | null;
+  phoneNumber: string;
+  transactionalSms: boolean;
+  transactionalWhatsapp: boolean;
+  promotionalOffers: boolean;
+  consentTimestamp: string;
+  consentSource: string;
+  optOutTimestamp?: string | null;
+  optOutReason?: string | null;
+  ipAddress?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const CommunicationConsentStore = {
+  findByPhone(phone: string): CommunicationConsentItem | null {
+    const digits = phone.replace(/\D/g, "").slice(-10);
+    const list = globalThis.__landora_communication_consents || [];
+    return list.find(c => c.phoneNumber.replace(/\D/g, "").slice(-10) === digits) || null;
+  },
+
+  findByUserId(userId: string): CommunicationConsentItem | null {
+    const list = globalThis.__landora_communication_consents || [];
+    return list.find(c => c.userId === userId) || null;
+  },
+
+  save(data: {
+    userId?: string | null;
+    phoneNumber: string;
+    transactionalSms?: boolean;
+    transactionalWhatsapp?: boolean;
+    promotionalOffers?: boolean;
+    consentSource?: string;
+    ipAddress?: string | null;
+  }): CommunicationConsentItem {
+    const existing = this.findByPhone(data.phoneNumber);
+    const now = new Date().toISOString();
+
+    if (existing) {
+      if (data.userId) existing.userId = data.userId;
+      if (data.transactionalSms !== undefined) existing.transactionalSms = data.transactionalSms;
+      if (data.transactionalWhatsapp !== undefined) existing.transactionalWhatsapp = data.transactionalWhatsapp;
+      if (data.promotionalOffers !== undefined) existing.promotionalOffers = data.promotionalOffers;
+      existing.consentTimestamp = now;
+      existing.updatedAt = now;
+      return existing;
+    }
+
+    const newItem: CommunicationConsentItem = {
+      id: `consent-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      userId: data.userId || null,
+      phoneNumber: data.phoneNumber,
+      transactionalSms: data.transactionalSms ?? true,
+      transactionalWhatsapp: data.transactionalWhatsapp ?? true,
+      promotionalOffers: data.promotionalOffers ?? false, // Strictly not auto-opted
+      consentTimestamp: now,
+      consentSource: data.consentSource || "POST_PROPERTY_FORM",
+      ipAddress: data.ipAddress || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    globalThis.__landora_communication_consents = [
+      newItem,
+      ...(globalThis.__landora_communication_consents || [])
+    ];
+    return newItem;
+  },
+
+  optOut(phone: string, reason = "User requested opt-out"): boolean {
+    const existing = this.findByPhone(phone);
+    if (!existing) return false;
+    existing.transactionalSms = false;
+    existing.transactionalWhatsapp = false;
+    existing.promotionalOffers = false;
+    existing.optOutTimestamp = new Date().toISOString();
+    existing.optOutReason = reason;
+    existing.updatedAt = new Date().toISOString();
+    return true;
+  }
+};
+
+// -----------------------------------------------------------------------------
+// NOTIFICATION DELIVERY LOG STORE
+// -----------------------------------------------------------------------------
+export interface NotificationDeliveryLogItem {
+  id: string;
+  userId?: string | null;
+  recipientPhone: string;
+  channel: "SMS" | "WHATSAPP" | "EMAIL";
+  eventType: string;
+  templateName?: string | null;
+  messageBody: string;
+  status: "PENDING" | "QUEUED" | "SENT" | "DELIVERED" | "FAILED";
+  provider?: string | null;
+  providerMessageId?: string | null;
+  deliveryResult?: string | null;
+  errorInfo?: string | null;
+  sentAt?: string | null;
+  deliveredAt?: string | null;
+  createdAt: string;
+}
+
+export const NotificationDeliveryLogStore = {
+  create(data: Omit<NotificationDeliveryLogItem, "id" | "createdAt">): NotificationDeliveryLogItem {
+    const item: NotificationDeliveryLogItem = {
+      ...data,
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString(),
+    };
+    globalThis.__landora_delivery_logs = [item, ...(globalThis.__landora_delivery_logs || [])];
+    return item;
+  },
+
+  getAll(limit = 100): NotificationDeliveryLogItem[] {
+    const list = globalThis.__landora_delivery_logs || [];
+    return list.slice(0, limit);
+  },
+
+  getByRecipient(phone: string): NotificationDeliveryLogItem[] {
+    const digits = phone.replace(/\D/g, "").slice(-10);
+    const list = globalThis.__landora_delivery_logs || [];
+    return list.filter(l => l.recipientPhone.replace(/\D/g, "").slice(-10) === digits);
+  }
+};
+

@@ -4,12 +4,7 @@ import { getServerSessionUser } from "@/lib/auth";
 export async function POST(request: NextRequest) {
   try {
     const user = await getServerSessionUser();
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized. Please sign in to upload property photographs." },
-        { status: 401 }
-      );
-    }
+    // Allow upload even if session is pending, so users filling out post-property wizard can upload photos before Step 5/6 login
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;

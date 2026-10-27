@@ -3,6 +3,7 @@ import { getServerSessionUser } from "@/lib/auth";
 import { DataAccess } from "@/lib/data-access";
 import { PropertyCategoryType, ListingType } from "@/types";
 import { sendListingSubmittedEmail, sendAdminNewPropertyNotificationEmail } from "@/lib/email";
+import { NotificationService } from "@/lib/notification-service";
 import { INITIAL_ADMIN_EMAIL } from "@/lib/constants";
 
 // GET /api/seller/listings - Retrieve all listings for the authenticated user
@@ -42,14 +43,7 @@ export async function GET(request: NextRequest) {
 // POST /api/seller/listings - Create a new property listing (Multi-step form submission)
 export async function POST(request: NextRequest) {
   try {
-    const user = await getServerSessionUser();
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized. Please sign in to publish a property." },
-        { status: 401 }
-      );
-    }
-
+    let user = await getServerSessionUser();
     const body = await request.json();
     const {
       listingType,
@@ -77,6 +71,7 @@ export async function POST(request: NextRequest) {
       state,
       pinCode,
       images,
+      photosViaWhatsApp,
       amenities,
       sellerType,
       sellerName,
@@ -85,6 +80,29 @@ export async function POST(request: NextRequest) {
       sellerWhatsapp,
       isDraft,
     } = body;
+
+    // If user is not yet logged in with cookie, resolve or create account from seller contact details
+    if (!user) {
+      if (sellerEmail) {
+        const cleanEmail = String(sellerEmail).toLowerCase().trim();
+        user = await DataAccess.findUserByEmail(cleanEmail);
+        if (!user) {
+          user = await DataAccess.createUser({
+            name: sellerName?.trim() || "Landora Seller",
+            email: cleanEmail,
+            phoneNumber: sellerPhone?.trim() || undefined,
+            role: sellerType === "AGENT" ? "AGENT" : sellerType === "BUILDER" ? "BUILDER" : "SELLER",
+          });
+        }
+      }
+    }
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Please enter your name, email, and phone number to publish your property." },
+        { status: 401 }
+      );
+    }
 
     // --- Server-side Validation ---
     if (!isDraft) {
@@ -130,9 +148,10 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (!images || !Array.isArray(images) || images.length === 0) {
+      // If user chose to share photos on WhatsApp later, allow proceeding without photos
+      if (!photosViaWhatsApp && (!images || !Array.isArray(images) || images.length === 0)) {
         return NextResponse.json(
-          { success: false, error: "Please upload at least one photograph of the property." },
+          { success: false, error: "Please upload at least one photograph of the property or select the option to share photos on WhatsApp later." },
           { status: 400 }
         );
       }
@@ -200,11 +219,41 @@ export async function POST(request: NextRequest) {
             isPrimary: img.isPrimary ?? (idx === 0),
             order: idx,
           }))
-        : [{ id: "placeholder", url: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1200&auto=format&fit=crop", isPrimary: true }],
+        : [{ 
+            id: "placeholder-wa", 
+            url: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1200&auto=format&fit=crop", 
+            caption: photosViaWhatsApp ? "Photos to be shared via WhatsApp" : "Main Property Image",
+            isPrimary: true 
+          }],
     });
+
+    // Phase 4: Save Communication Consent & Preferences (TRAI DLT & DPDP compliant)
+    const { communicationConsent } = body;
+    if (effectiveSellerPhone) {
+      await DataAccess.saveCommunicationConsent({
+        userId: user.id,
+        phoneNumber: effectiveSellerPhone,
+        transactionalSms: communicationConsent?.transactionalSms !== undefined ? Boolean(communicationConsent.transactionalSms) : true,
+        transactionalWhatsapp: communicationConsent?.transactionalWhatsapp !== undefined ? Boolean(communicationConsent.transactionalWhatsapp) : true,
+        promotionalOffers: Boolean(communicationConsent?.promotionalOffers), // strictly not auto-opted
+        consentSource: "POST_PROPERTY_FORM",
+        ipAddress: request.headers.get("x-forwarded-for") || "127.0.0.1",
+      });
+    }
 
     // Phase 9: If submitted for review (not draft), dispatch notification and email
     if (!isDraft) {
+      // Automated Transactional Notification (SMS & WhatsApp according to user consent)
+      if (effectiveSellerPhone) {
+        NotificationService.notifyPropertySubmitted({
+          userId: user.id,
+          phone: effectiveSellerPhone,
+          propertyId: createdProperty.id,
+          propertyTitle: createdProperty.title,
+          referenceCode: createdProperty.slug || createdProperty.id,
+        }).catch(err => console.error("[NOTIF ERROR] notifyPropertySubmitted:", err));
+      }
+
       await DataAccess.createNotification({
         userId: user.id,
         title: "Listing Under Review",
