@@ -96,7 +96,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   }
 }
 
-// PATCH /api/seller/listings/[id] - Deactivate, activate, or update status
+// PATCH /api/seller/listings/[id] - Deactivate, activate, or update status / images
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await getServerSessionUser();
@@ -109,46 +109,112 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const { id } = await params;
     const body = await request.json();
-    const { status, rejectionReason } = body;
+    const { status, rejectionReason, images } = body;
 
-    const updated = await DataAccess.setListingStatus(
-      id,
-      user.id,
-      status,
-      user.role,
-      rejectionReason
-    );
+    // Check ownership before modification
+    const existing = await DataAccess.getPropertyById(id);
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Property listing not found." },
+        { status: 404 }
+      );
+    }
 
-    // Automated Transactional Notification (SMS & WhatsApp per consent)
-    if (updated?.sellerPhone) {
-      if (status === "ACTIVE") {
-        NotificationService.notifyPropertyPublished({
-          userId: updated.sellerId,
-          phone: updated.sellerPhone,
-          propertyId: updated.id,
-          propertyTitle: updated.title,
-        }).catch(err => console.error("[NOTIF] notifyPropertyPublished error:", err));
-      } else {
-        NotificationService.notifyStatusChanged({
-          userId: updated.sellerId,
-          phone: updated.sellerPhone,
-          propertyId: updated.id,
-          propertyTitle: updated.title,
-          extraInfo: status,
-        }).catch(err => console.error("[NOTIF] notifyStatusChanged error:", err));
+    if (existing.sellerId !== user.id && user.role !== "ADMIN") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: You cannot modify listings owned by another user." },
+        { status: 403 }
+      );
+    }
+
+    let updated;
+    if (images !== undefined) {
+      updated = await DataAccess.updateSellerProperty(id, user.id, { images }, user.role);
+    } else if (status) {
+      updated = await DataAccess.setListingStatus(
+        id,
+        user.id,
+        status,
+        user.role,
+        rejectionReason
+      );
+
+      // Automated Transactional Notification (SMS & WhatsApp per consent)
+      if (updated?.sellerPhone) {
+        if (status === "ACTIVE" || status === "PUBLISHED") {
+          NotificationService.notifyPropertyPublished({
+            userId: updated.sellerId,
+            phone: updated.sellerPhone,
+            propertyId: updated.id,
+            propertyTitle: updated.title,
+          }).catch(err => console.error("[NOTIF] notifyPropertyPublished error:", err));
+        } else {
+          NotificationService.notifyStatusChanged({
+            userId: updated.sellerId,
+            phone: updated.sellerPhone,
+            propertyId: updated.id,
+            propertyTitle: updated.title,
+            extraInfo: status,
+          }).catch(err => console.error("[NOTIF] notifyStatusChanged error:", err));
+        }
       }
+    } else {
+      updated = await DataAccess.updateSellerProperty(id, user.id, body, user.role);
     }
 
     return NextResponse.json({
       success: true,
-      message: `Listing status updated to ${status}.`,
+      message: `Listing updated successfully.`,
       listing: updated,
     });
   } catch (error: any) {
     console.error("[API ERROR] PATCH /api/seller/listings/[id]:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to update listing status." },
+      { success: false, error: error.message || "Failed to update listing." },
       { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/seller/listings/[id] - Securely delete listing owned by user
+export async function DELETE(request: NextRequest, { params }: Params) {
+  try {
+    const user = await getServerSessionUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized. Please sign in." },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+    const existing = await DataAccess.getPropertyById(id);
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Property listing not found." },
+        { status: 404 }
+      );
+    }
+
+    // Ownership check: Users can only delete their own listings
+    if (existing.sellerId !== user.id && user.role !== "ADMIN") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: You are not authorized to delete another user's property submission." },
+        { status: 403 }
+      );
+    }
+
+    await DataAccess.deleteSellerProperty(id, user.id, user.role);
+
+    return NextResponse.json({
+      success: true,
+      message: "Property listing deleted successfully.",
+    });
+  } catch (error: any) {
+    console.error("[API ERROR] DELETE /api/seller/listings/[id]:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to delete listing." },
+      { status: error.message?.includes("Forbidden") ? 403 : 500 }
     );
   }
 }

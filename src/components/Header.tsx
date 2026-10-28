@@ -814,6 +814,14 @@ export default function Header({
                         {t("nav.userDashboard", "User Dashboard")}
                       </Link>
                       <Link 
+                        href="/dashboard/seller/listings" 
+                        onClick={() => setProfileDropdownOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 hover:bg-emerald-50 hover:text-[#0c4a3e] font-semibold"
+                      >
+                        <Building2 className="w-3.5 h-3.5 text-[#0c4a3e]" />
+                        <span>{t("nav.myProperties", "My Properties & Submissions")}</span>
+                      </Link>
+                      <Link 
                         href="/dashboard/profile" 
                         onClick={() => setProfileDropdownOpen(false)}
                         className="flex items-center gap-2 px-4 py-2 hover:bg-emerald-50 hover:text-[#0c4a3e]"

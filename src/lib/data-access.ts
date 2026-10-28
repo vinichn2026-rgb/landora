@@ -94,11 +94,11 @@ export function mapPrismaPropertyToItem(record: any): PropertyItem {
     verifiedAt: record.verifiedAt ? new Date(record.verifiedAt).toISOString() : undefined,
     verificationNotes: record.verificationNotes || undefined,
     idempotencyKey: record.idempotencyKey || undefined,
-    sellerId: record.ownerId || "owner-01",
+    sellerId: record.ownerId || record.owner?.id || "",
     sellerName: record.owner?.name || "Landowner",
     sellerType: record.sellerType || "OWNER",
-    sellerPhone: record.owner?.phoneNumber || "+91 94433 12345",
-    sellerEmail: record.owner?.email || "contact@landora.in",
+    sellerPhone: record.owner?.phoneNumber || record.sellerPhone || "",
+    sellerEmail: record.owner?.email || record.sellerEmail || "",
     amenities: record.amenities ? record.amenities.map((a: any) => a.name) : [],
     images: record.images && record.images.length > 0 
       ? record.images.map((img: any) => ({
@@ -1040,11 +1040,21 @@ export const DataAccess = {
   // ---------------------------------------------------------------------------
   // Seller Listing Management & Moderation
   // ---------------------------------------------------------------------------
-  async getSellerProperties(sellerId: string): Promise<PropertyItem[]> {
+  async getSellerProperties(sellerId: string, userPhone?: string | null, userEmail?: string | null): Promise<PropertyItem[]> {
     if (process.env.DATABASE_URL) {
       try {
+        const orConditions: any[] = [{ ownerId: sellerId }];
+        if (userPhone && userPhone.length >= 10) {
+          const rawDigits = userPhone.replace(/\D/g, "");
+          const last10 = rawDigits.slice(-10);
+          orConditions.push({ owner: { phoneNumber: { contains: last10 } } });
+        }
+        if (userEmail && userEmail.includes("@")) {
+          orConditions.push({ owner: { email: userEmail.toLowerCase().trim() } });
+        }
+
         const records = await prisma.property.findMany({
-          where: { ownerId: sellerId },
+          where: { OR: orConditions },
           include: {
             images: { orderBy: { order: "asc" } },
             amenities: true,
@@ -1057,7 +1067,23 @@ export const DataAccess = {
         console.warn("[DATA-ACCESS WARNING] PostgreSQL getSellerProperties error:", err);
       }
     }
-    return PropertyStore.getBySeller(sellerId);
+
+    const list = PropertyStore.getBySeller(sellerId);
+    if (userPhone || userEmail) {
+      const all = PropertyStore.getAllAdmin().properties;
+      const extra = all.filter(p => 
+        (userPhone && p.sellerPhone && p.sellerPhone.includes(userPhone.slice(-10))) ||
+        (userEmail && p.sellerEmail && p.sellerEmail.toLowerCase() === userEmail.toLowerCase())
+      );
+      const combined = [...list];
+      for (const item of extra) {
+        if (!combined.some(c => c.id === item.id)) {
+          combined.push(item);
+        }
+      }
+      return combined;
+    }
+    return list;
   },
 
   async getSellerMetrics(sellerId: string) {
@@ -1271,6 +1297,19 @@ export const DataAccess = {
             ...(updates.city ? { city: updates.city } : {}),
             ...(updates.pinCode ? { pinCode: updates.pinCode } : {}),
             ...(updates.status ? { status: updates.status as any } : {}),
+            ...(updates.verificationNotes !== undefined ? { verificationNotes: updates.verificationNotes } : {}),
+            ...(updates.rejectionReason !== undefined ? { rejectionReason: updates.rejectionReason } : {}),
+            ...(updates.images !== undefined ? {
+              images: {
+                deleteMany: {},
+                create: updates.images.map((img, idx) => ({
+                  url: img.url,
+                  caption: img.caption || null,
+                  isPrimary: img.isPrimary ?? (idx === 0),
+                  order: img.order ?? idx,
+                })),
+              },
+            } : {}),
           },
           include: {
             images: { orderBy: { order: "asc" } },
@@ -1287,6 +1326,29 @@ export const DataAccess = {
     const updated = PropertyStore.update(id, updates);
     if (!updated) throw new Error("Property update failed.");
     return updated;
+  },
+
+  async deleteSellerProperty(id: string, userId: string, userRole?: string): Promise<boolean> {
+    const existing = await this.getPropertyById(id);
+    if (!existing) {
+      throw new Error("Property not found.");
+    }
+    // Strict ownership verification
+    if (existing.sellerId !== userId && userRole !== "ADMIN") {
+      throw new Error("Forbidden: You cannot delete another user's property submission.");
+    }
+
+    if (process.env.DATABASE_URL) {
+      try {
+        await prisma.property.delete({
+          where: { id },
+        });
+        return true;
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL deleteSellerProperty error:", err);
+      }
+    }
+    return PropertyStore.delete(id);
   },
 
   async associatePropertyToUser(propertyId: string, userId: string, sellerPhone: string): Promise<boolean> {

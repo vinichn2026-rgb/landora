@@ -6,7 +6,7 @@ import { sendListingSubmittedEmail, sendAdminNewPropertyNotificationEmail } from
 import { NotificationService } from "@/lib/notification-service";
 import { INITIAL_ADMIN_EMAIL } from "@/lib/constants";
 
-// GET /api/seller/listings - Retrieve all listings for the authenticated user
+// GET /api/seller/listings - Retrieve all listings owned by the authenticated user
 export async function GET(request: NextRequest) {
   try {
     const user = await getServerSessionUser();
@@ -20,16 +20,41 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
 
-    let listings = await DataAccess.getSellerProperties(user.id);
+    // Retrieve strictly authenticated user's properties
+    const allListings = await DataAccess.getSellerProperties(user.id, user.phoneNumber || undefined, user.email || undefined);
+
+    // Compute category counts for tab badges
+    const counts = {
+      ALL: allListings.length,
+      DRAFT: allListings.filter(l => l.status === "DRAFT").length,
+      SUBMITTED: allListings.filter(l => l.status === "SUBMITTED").length,
+      PENDING_VERIFICATION: allListings.filter(l => l.status === "PENDING_VERIFICATION" || l.status === "PENDING").length,
+      NEEDS_MORE_INFORMATION: allListings.filter(l => l.status === "NEEDS_MORE_INFORMATION").length,
+      PUBLISHED: allListings.filter(l => l.status === "PUBLISHED" || l.status === "ACTIVE").length,
+      REJECTED: allListings.filter(l => l.status === "REJECTED").length,
+      SOLD_RENTED: allListings.filter(l => l.status === "SOLD" || l.status === "RENTED" || l.status === "DEACTIVATED").length,
+    };
+
+    let filteredListings = [...allListings];
 
     if (statusFilter && statusFilter !== "ALL" && statusFilter !== "all") {
-      listings = listings.filter(l => l.status === statusFilter.toUpperCase());
+      const upper = statusFilter.toUpperCase();
+      if (upper === "SOLD_RENTED") {
+        filteredListings = filteredListings.filter(l => l.status === "SOLD" || l.status === "RENTED" || l.status === "DEACTIVATED");
+      } else if (upper === "PENDING_VERIFICATION") {
+        filteredListings = filteredListings.filter(l => l.status === "PENDING_VERIFICATION" || l.status === "PENDING");
+      } else if (upper === "PUBLISHED") {
+        filteredListings = filteredListings.filter(l => l.status === "PUBLISHED" || l.status === "ACTIVE");
+      } else {
+        filteredListings = filteredListings.filter(l => l.status === upper);
+      }
     }
 
     return NextResponse.json({
       success: true,
-      listings,
-      count: listings.length,
+      listings: filteredListings,
+      count: filteredListings.length,
+      counts,
     });
   } catch (error: any) {
     console.error("[API ERROR] GET /api/seller/listings:", error);

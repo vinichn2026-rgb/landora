@@ -275,7 +275,7 @@ export const PropertyStore = {
 
   // Create new property
   create(data: Omit<PropertyItem, "id" | "slug" | "viewsCount" | "publishedAt" | "createdAt" | "updatedAt">): PropertyItem {
-    const id = `land-${Date.now()}`;
+    const id = `land-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const slug = data.title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
