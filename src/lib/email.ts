@@ -380,16 +380,31 @@ export async function sendListingModerationEmail(
   email: string,
   sellerName: string,
   propertyTitle: string,
-  status: "ACTIVE" | "REJECTED",
+  status: "ACTIVE" | "REJECTED" | "NEEDS_MORE_INFORMATION",
   slug?: string,
   rejectionReason?: string
 ): Promise<EmailDispatchResult> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const isApproved = status === "ACTIVE";
+  const isInfoRequired = status === "NEEDS_MORE_INFORMATION";
 
   const actionUrl = isApproved
     ? `${baseUrl}/properties/${slug || ""}`
     : `${baseUrl}/dashboard/seller/listings`;
+
+  let emailTitle = "Your Listing is Now Live on Landora!";
+  let emailSubject = `Listing Approved: ${propertyTitle}`;
+  let eventType = "LISTING_APPROVED";
+
+  if (isInfoRequired) {
+    emailTitle = "Action Required: Additional Details Needed for Listing";
+    emailSubject = `Additional Details Required: ${propertyTitle}`;
+    eventType = "LISTING_INFO_REQUIRED";
+  } else if (!isApproved) {
+    emailTitle = "Update Required: Property Listing Not Approved";
+    emailSubject = `Action Required: Listing Review for ${propertyTitle}`;
+    eventType = "LISTING_REJECTED";
+  }
 
   const bodyContent = isApproved
     ? `
@@ -400,6 +415,16 @@ export async function sendListingModerationEmail(
         <p style="margin: 4px 0 0; font-size: 12px; color: #047857;">Status: Approved &amp; Published &bull; Visible in search results</p>
       </div>
       <p>Potential buyers can now discover your property, view uploaded photos, and contact you directly via phone and enquiry forms.</p>
+    `
+    : isInfoRequired
+    ? `
+      <p>Hello <strong>${sellerName}</strong>,</p>
+      <p>Our moderation desk has reviewed your property listing <strong>${propertyTitle}</strong>. We need a few additional details or document clarifications before we can publish it live to buyers:</p>
+      <div style="background-color: #fefce8; padding: 14px 18px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #eab308;">
+        <strong style="color: #854d0e; font-size: 13px;">Requested Information / Action:</strong>
+        <p style="margin: 4px 0 0; font-size: 14px; color: #713f12;">${rejectionReason || "Please upload legible document photos or clarify boundary details."}</p>
+      </div>
+      <p>Please click below to update your listing in your Seller Dashboard so we can complete verification and publish it immediately.</p>
     `
     : `
       <p>Hello <strong>${sellerName}</strong>,</p>
@@ -412,16 +437,16 @@ export async function sendListingModerationEmail(
     `;
 
   const html = renderBrandedHtml(
-    isApproved ? "Your Listing is Now Live on Landora!" : "Update Required: Property Listing Not Approved",
+    emailTitle,
     bodyContent,
-    { text: isApproved ? "View Live Property" : "Edit Listing", url: actionUrl }
+    { text: isApproved ? "View Live Property" : isInfoRequired ? "Provide Details" : "Edit Listing", url: actionUrl }
   );
 
   return dispatchEmail({
     to: email,
-    subject: isApproved ? `Listing Approved: ${propertyTitle}` : `Action Required: Listing Review for ${propertyTitle}`,
+    subject: emailSubject,
     html,
-    event: isApproved ? "LISTING_APPROVED" : "LISTING_REJECTED",
+    event: eventType,
   });
 }
 

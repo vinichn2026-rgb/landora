@@ -41,6 +41,10 @@ export default function AdminPropertiesPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
+  // Request Information Dialog Modal (Phase 9)
+  const [requestingInfoProperty, setRequestingInfoProperty] = useState<PropertyItem | null>(null);
+  const [requestInfoReason, setRequestInfoReason] = useState("");
+
   // Inspection Modal
   const [inspectingProperty, setInspectingProperty] = useState<PropertyItem | null>(null);
 
@@ -79,7 +83,7 @@ export default function AdminPropertiesPage() {
     fetchProperties();
   };
 
-  const handleModerate = async (propertyId: string, action: "APPROVE" | "REJECT" | "DEACTIVATE" | "EXPIRE", reason?: string) => {
+  const handleModerate = async (propertyId: string, action: "APPROVE" | "REJECT" | "REQUEST_INFO" | "DEACTIVATE" | "EXPIRE", reason?: string) => {
     setIsProcessing(true);
     try {
       const res = await fetch("/api/admin/properties", {
@@ -97,6 +101,8 @@ export default function AdminPropertiesPage() {
         setActionNotice(data.message);
         setRejectingProperty(null);
         setRejectionReason("");
+        setRequestingInfoProperty(null);
+        setRequestInfoReason("");
         fetchProperties();
         setTimeout(() => setActionNotice(null), 4000);
       } else {
@@ -133,12 +139,20 @@ export default function AdminPropertiesPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ACTIVE":
+      case "APPROVED":
+      case "PUBLISHED":
         return <span className="bg-emerald-100 text-[#0c4a3e] text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
           <CheckCircle2 className="w-3 h-3" /> Live
         </span>;
       case "PENDING":
+      case "SUBMITTED":
+      case "PENDING_VERIFICATION":
         return <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
           <Clock className="w-3 h-3" /> Pending Review
+        </span>;
+      case "NEEDS_MORE_INFORMATION":
+        return <span className="bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+          <AlertCircle className="w-3 h-3 text-amber-600" /> Info Needed
         </span>;
       case "DRAFT":
         return <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -150,6 +164,7 @@ export default function AdminPropertiesPage() {
         </span>;
       case "DEACTIVATED":
       case "SOLD":
+      case "RENTED":
         return <span className="bg-slate-200 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
           <Power className="w-3 h-3" /> Deactivated
         </span>;
@@ -319,7 +334,7 @@ export default function AdminPropertiesPage() {
                           Inspect
                         </button>
 
-                        {prop.status !== "ACTIVE" && (
+                        {prop.status !== "ACTIVE" && prop.status !== "APPROVED" && (
                           <button
                             onClick={() => handleModerate(prop.id, "APPROVE")}
                             className="px-2.5 py-1 rounded bg-[#0c4a3e] hover:bg-[#072e27] text-white font-bold text-[11px] shadow-2xs"
@@ -327,6 +342,14 @@ export default function AdminPropertiesPage() {
                             Approve
                           </button>
                         )}
+
+                        <button
+                          onClick={() => setRequestingInfoProperty(prop)}
+                          className="px-2 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-[11px] border border-amber-200"
+                          title="Request additional info or documents from seller"
+                        >
+                          Request Info
+                        </button>
 
                         {prop.status !== "REJECTED" && (
                           <button
@@ -416,6 +439,58 @@ export default function AdminPropertiesPage() {
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition disabled:opacity-50"
               >
                 {isProcessing ? "Rejecting..." : "Confirm Rejection"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request Information Dialog Modal (Phase 9) */}
+      {requestingInfoProperty && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+                Request Additional Information
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Listing: <strong>{requestingInfoProperty.title}</strong>
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                The seller ({requestingInfoProperty.sellerName}) will be notified via SMS, WhatsApp, and email to provide the requested details.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Details or Documents Needed *
+              </label>
+              <textarea
+                rows={4}
+                value={requestInfoReason}
+                onChange={e => setRequestInfoReason(e.target.value)}
+                placeholder="e.g. Please upload clear photos of the Patta document and clarify the eastern road width boundary."
+                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-amber-600 leading-relaxed"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setRequestingInfoProperty(null);
+                  setRequestInfoReason("");
+                }}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isProcessing || requestInfoReason.trim().length < 5}
+                onClick={() => handleModerate(requestingInfoProperty.id, "REQUEST_INFO", requestInfoReason.trim())}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition disabled:opacity-50 shadow-xs"
+              >
+                {isProcessing ? "Sending Request..." : "Send Request to Seller"}
               </button>
             </div>
           </div>

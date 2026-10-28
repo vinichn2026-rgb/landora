@@ -1129,6 +1129,75 @@ export const NotificationDeliveryLogStore = {
   getByProperty(propertyId: string): NotificationDeliveryLogItem[] {
     const list = globalThis.__landora_delivery_logs || [];
     return list.filter(l => l.propertyId === propertyId);
+  },
+
+  findById(id: string): NotificationDeliveryLogItem | null {
+    const list = globalThis.__landora_delivery_logs || [];
+    return list.find(l => l.id === id) || null;
+  },
+
+  update(id: string, updates: Partial<NotificationDeliveryLogItem>): NotificationDeliveryLogItem | null {
+    const list = globalThis.__landora_delivery_logs || [];
+    const item = list.find(l => l.id === id);
+    if (!item) return null;
+    Object.assign(item, updates);
+    return item;
+  },
+
+  findExisting(params: {
+    propertyId?: string | null;
+    eventType: string;
+    channel: string;
+    recipientPhone?: string;
+    statusIn?: string[];
+  }): NotificationDeliveryLogItem | null {
+    const list = globalThis.__landora_delivery_logs || [];
+    const targetStatus = params.statusIn || ["SENT", "DELIVERED"];
+    const targetDigits = params.recipientPhone ? params.recipientPhone.replace(/\D/g, "").slice(-10) : "";
+
+    return list.find(l => {
+      if (params.propertyId && l.propertyId !== params.propertyId) return false;
+      if (l.eventType !== params.eventType) return false;
+      if (l.channel !== params.channel) return false;
+      if (targetDigits) {
+        const itemDigits = l.recipientPhone.replace(/\D/g, "").slice(-10);
+        if (itemDigits !== targetDigits) return false;
+      }
+      return targetStatus.includes(l.status);
+    }) || null;
+  },
+
+  getFiltered(filters: {
+    status?: string;
+    channel?: string;
+    eventType?: string;
+    propertyId?: string;
+    page?: number;
+    limit?: number;
+  }): { data: NotificationDeliveryLogItem[]; total: number; totalPages: number } {
+    let list = globalThis.__landora_delivery_logs || [];
+
+    if (filters.status && filters.status !== "ALL") {
+      list = list.filter(l => l.status === filters.status);
+    }
+    if (filters.channel && filters.channel !== "ALL") {
+      list = list.filter(l => l.channel === filters.channel);
+    }
+    if (filters.eventType && filters.eventType !== "ALL") {
+      list = list.filter(l => l.eventType === filters.eventType);
+    }
+    if (filters.propertyId) {
+      list = list.filter(l => l.propertyId === filters.propertyId);
+    }
+
+    const page = Math.max(1, filters.page || 1);
+    const limit = Math.max(1, Math.min(100, filters.limit || 20));
+    const total = list.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const start = (page - 1) * limit;
+    const data = list.slice(start, start + limit);
+
+    return { data, total, totalPages };
   }
 };
 

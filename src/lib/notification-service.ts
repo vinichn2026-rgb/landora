@@ -25,7 +25,8 @@ export const NotificationService = {
    */
   async dispatchEventNotification(
     eventType: WhatsAppEventType,
-    params: PropertyNotificationParams
+    params: PropertyNotificationParams,
+    options?: { forceRetry?: boolean }
   ): Promise<{ smsSent: boolean; whatsappSent: boolean; errors: string[] }> {
     const errors: string[] = [];
     const norm = normalizePhoneNumber(params.phone);
@@ -99,62 +100,90 @@ export const NotificationService = {
         break;
     }
 
-    // 2. Dispatch Automated WhatsApp if permitted
+    // 2. Dispatch Automated WhatsApp if permitted (with Deduplication check)
     if (allowWhatsapp) {
-      try {
-        const waRes = await sendTransactionalWhatsApp(
-          norm.e164,
-          eventType,
-          waParams,
-          params.language || "en"
-        );
+      const existingWa = !options?.forceRetry
+        ? await DataAccess.findExistingDeliveryLog({
+            propertyId: params.propertyId,
+            eventType,
+            channel: "WHATSAPP",
+            recipientPhone: norm.e164,
+          })
+        : null;
 
-        await DataAccess.logNotificationDelivery({
-          userId: params.userId,
-          propertyId: params.propertyId,
-          recipientPhone: norm.e164,
-          channel: "WHATSAPP",
-          eventType,
-          templateName: `landora_${eventType.toLowerCase()}`,
-          messageBody: JSON.stringify(waParams),
-          status: waRes.status,
-          provider: waRes.provider,
-          providerMessageId: waRes.messageId,
-          deliveryResult: waRes.deliveryResult,
-          errorInfo: waRes.error,
-          sentAt: waRes.success ? new Date() : undefined,
-        });
+      if (existingWa) {
+        console.log(`[NOTIFICATION] Suppressing duplicate WhatsApp for ${eventType} to ${norm.e164} (Already delivered).`);
+        waSuccess = true;
+      } else {
+        try {
+          const waRes = await sendTransactionalWhatsApp(
+            norm.e164,
+            eventType,
+            waParams,
+            params.language || "en"
+          );
 
-        waSuccess = waRes.success;
-        if (!waRes.success && waRes.error) errors.push(waRes.error);
-      } catch (err: any) {
-        errors.push(`WhatsApp error: ${err.message}`);
+          await DataAccess.logNotificationDelivery({
+            userId: params.userId,
+            propertyId: params.propertyId,
+            recipientPhone: norm.e164,
+            channel: "WHATSAPP",
+            eventType,
+            templateName: `landora_${eventType.toLowerCase()}`,
+            messageBody: JSON.stringify(waParams),
+            status: waRes.status,
+            provider: waRes.provider,
+            providerMessageId: waRes.messageId,
+            deliveryResult: waRes.deliveryResult,
+            errorInfo: waRes.error,
+            sentAt: waRes.success ? new Date() : undefined,
+          });
+
+          waSuccess = waRes.success;
+          if (!waRes.success && waRes.error) errors.push(waRes.error);
+        } catch (err: any) {
+          errors.push(`WhatsApp error: ${err.message}`);
+        }
       }
     }
 
-    // 3. Dispatch Transactional SMS if permitted
+    // 3. Dispatch Transactional SMS if permitted (with Deduplication check)
     if (allowSms && smsText) {
-      try {
-        const smsRes = await sendTransactionalSms(norm.e164, smsText);
+      const existingSms = !options?.forceRetry
+        ? await DataAccess.findExistingDeliveryLog({
+            propertyId: params.propertyId,
+            eventType,
+            channel: "SMS",
+            recipientPhone: norm.e164,
+          })
+        : null;
 
-        await DataAccess.logNotificationDelivery({
-          userId: params.userId,
-          propertyId: params.propertyId,
-          recipientPhone: norm.e164,
-          channel: "SMS",
-          eventType,
-          messageBody: smsText,
-          status: smsRes.success ? "SENT" : "FAILED",
-          provider: smsRes.provider,
-          providerMessageId: smsRes.messageId,
-          errorInfo: smsRes.error,
-          sentAt: smsRes.success ? new Date() : undefined,
-        });
+      if (existingSms) {
+        console.log(`[NOTIFICATION] Suppressing duplicate SMS for ${eventType} to ${norm.e164} (Already delivered).`);
+        smsSuccess = true;
+      } else {
+        try {
+          const smsRes = await sendTransactionalSms(norm.e164, smsText);
 
-        smsSuccess = smsRes.success;
-        if (!smsRes.success && smsRes.error) errors.push(smsRes.error);
-      } catch (err: any) {
-        errors.push(`SMS error: ${err.message}`);
+          await DataAccess.logNotificationDelivery({
+            userId: params.userId,
+            propertyId: params.propertyId,
+            recipientPhone: norm.e164,
+            channel: "SMS",
+            eventType,
+            messageBody: smsText,
+            status: smsRes.success ? "SENT" : "FAILED",
+            provider: smsRes.provider,
+            providerMessageId: smsRes.messageId,
+            errorInfo: smsRes.error,
+            sentAt: smsRes.success ? new Date() : undefined,
+          });
+
+          smsSuccess = smsRes.success;
+          if (!smsRes.success && smsRes.error) errors.push(smsRes.error);
+        } catch (err: any) {
+          errors.push(`SMS error: ${err.message}`);
+        }
       }
     }
 

@@ -1570,10 +1570,11 @@ export const DataAccess = {
     };
   },
 
-  async moderateProperty(propertyId: string, action: "APPROVE" | "REJECT" | "DEACTIVATE" | "EXPIRE", reason?: string, adminName = "Platform Administrator") {
+  async moderateProperty(propertyId: string, action: "APPROVE" | "REJECT" | "REQUEST_INFO" | "DEACTIVATE" | "EXPIRE", reason?: string, adminName = "Platform Administrator") {
     const statusMap: Record<string, PropertyStatus> = {
       APPROVE: "ACTIVE",
       REJECT: "REJECTED",
+      REQUEST_INFO: "NEEDS_MORE_INFORMATION",
       DEACTIVATE: "DEACTIVATED",
       EXPIRE: "EXPIRED",
     };
@@ -1587,6 +1588,7 @@ export const DataAccess = {
           data: {
             status: newStatus as any,
             ...(action === "APPROVE" ? { verificationStatus: "INFO_REVIEWED" } : {}),
+            ...(reason ? { rejectionReason: reason } : {}),
           },
           include: {
             images: { orderBy: { order: "asc" } },
@@ -1609,15 +1611,23 @@ export const DataAccess = {
     }
 
     // Phase 9: In-app notification & Moderation Email to Seller
-    if (updated && (action === "APPROVE" || action === "REJECT")) {
+    if (updated && (action === "APPROVE" || action === "REJECT" || action === "REQUEST_INFO")) {
       const isApproved = action === "APPROVE";
+      const isInfoRequested = action === "REQUEST_INFO";
+
       await this.createNotification({
         userId: updated.sellerId,
-        title: isApproved ? "Listing Approved & Live" : "Listing Review: Changes Needed",
+        title: isApproved 
+          ? "Listing Approved & Live" 
+          : isInfoRequested 
+            ? "Additional Details Required for Listing" 
+            : "Listing Review: Changes Needed",
         message: isApproved
           ? `Your property "${updated.title}" has been approved and is now live to buyers.`
-          : `Your listing "${updated.title}" was not approved: ${reason || "Documentation update needed."}`,
-        type: isApproved ? "LISTING_APPROVED" : "LISTING_REJECTED",
+          : isInfoRequested
+            ? `Our moderation desk requested additional details for "${updated.title}": ${reason || "Please provide updated boundary or documentation details."}`
+            : `Your listing "${updated.title}" was not approved: ${reason || "Documentation update needed."}`,
+        type: isApproved ? "LISTING_APPROVED" : isInfoRequested ? "LISTING_INFO_REQUIRED" : "LISTING_REJECTED",
         link: isApproved ? `/properties/${updated.slug}` : `/dashboard/seller/listings`,
         entityType: "PROPERTY",
         entityId: updated.id,
@@ -1628,7 +1638,7 @@ export const DataAccess = {
           updated.sellerEmail,
           updated.sellerName,
           updated.title,
-          isApproved ? "ACTIVE" : "REJECTED",
+          isApproved ? "ACTIVE" : isInfoRequested ? "NEEDS_MORE_INFORMATION" : "REJECTED",
           updated.slug,
           reason
         );
@@ -2366,6 +2376,138 @@ export const DataAccess = {
     return NotificationDeliveryLogStore.getByProperty(propertyId);
   },
 
+  async findExistingDeliveryLog(params: {
+    propertyId?: string | null;
+    eventType: string;
+    channel: string;
+    recipientPhone?: string;
+    statusIn?: string[];
+  }) {
+    const targetStatuses = params.statusIn || ["SENT", "DELIVERED"];
+    if (process.env.DATABASE_URL) {
+      try {
+        const where: any = {
+          eventType: params.eventType,
+          channel: params.channel,
+          status: { in: targetStatuses },
+        };
+        if (params.propertyId) where.propertyId = params.propertyId;
+        if (params.recipientPhone) where.recipientPhone = params.recipientPhone;
+
+        const found = await prisma.notificationDeliveryLog.findFirst({
+          where,
+          orderBy: { createdAt: "desc" },
+        });
+        if (found) return found;
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL findExistingDeliveryLog error:", err);
+      }
+    }
+    return NotificationDeliveryLogStore.findExisting(params);
+  },
+
+  async getNotificationLogById(id: string) {
+    if (process.env.DATABASE_URL) {
+      try {
+        return await prisma.notificationDeliveryLog.findUnique({
+          where: { id },
+        });
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getNotificationLogById error:", err);
+      }
+    }
+    return NotificationDeliveryLogStore.findById(id);
+  },
+
+  async updateNotificationDeliveryLog(
+    id: string,
+    data: {
+      status?: "PENDING" | "QUEUED" | "SENT" | "DELIVERED" | "FAILED";
+      provider?: string | null;
+      providerMessageId?: string | null;
+      deliveryResult?: string | null;
+      errorInfo?: string | null;
+      sentAt?: Date | null;
+      deliveredAt?: Date | null;
+    }
+  ) {
+    if (process.env.DATABASE_URL) {
+      try {
+        return await prisma.notificationDeliveryLog.update({
+          where: { id },
+          data: {
+            ...(data.status ? { status: data.status } : {}),
+            ...(data.provider !== undefined ? { provider: data.provider } : {}),
+            ...(data.providerMessageId !== undefined ? { providerMessageId: data.providerMessageId } : {}),
+            ...(data.deliveryResult !== undefined ? { deliveryResult: data.deliveryResult } : {}),
+            ...(data.errorInfo !== undefined ? { errorInfo: data.errorInfo } : {}),
+            ...(data.sentAt !== undefined ? { sentAt: data.sentAt } : {}),
+            ...(data.deliveredAt !== undefined ? { deliveredAt: data.deliveredAt } : {}),
+          },
+        });
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL updateNotificationDeliveryLog error:", err);
+      }
+    }
+    return NotificationDeliveryLogStore.update(id, {
+      ...data,
+      sentAt: data.sentAt ? data.sentAt.toISOString() : (data.sentAt === null ? null : undefined),
+      deliveredAt: data.deliveredAt ? data.deliveredAt.toISOString() : (data.deliveredAt === null ? null : undefined),
+    });
+  },
+
+  async getNotificationDeliveryLogs(filters: {
+    status?: string;
+    channel?: string;
+    eventType?: string;
+    propertyId?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = Math.max(1, filters.page || 1);
+    const limit = Math.max(1, Math.min(100, filters.limit || 20));
+    const skip = (page - 1) * limit;
+
+    if (process.env.DATABASE_URL) {
+      try {
+        const where: any = {};
+        if (filters.status && filters.status !== "ALL") where.status = filters.status;
+        if (filters.channel && filters.channel !== "ALL") where.channel = filters.channel;
+        if (filters.eventType && filters.eventType !== "ALL") where.eventType = filters.eventType;
+        if (filters.propertyId) where.propertyId = filters.propertyId;
+
+        const [data, total] = await Promise.all([
+          prisma.notificationDeliveryLog.findMany({
+            where,
+            orderBy: { createdAt: "desc" },
+            skip,
+            take: limit,
+          }),
+          prisma.notificationDeliveryLog.count({ where }),
+        ]);
+
+        return {
+          data,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+          page,
+          limit,
+        };
+      } catch (err) {
+        console.warn("[DATA-ACCESS WARNING] PostgreSQL getNotificationDeliveryLogs error:", err);
+      }
+    }
+
+    const res = NotificationDeliveryLogStore.getFiltered(filters);
+    return {
+      data: res.data,
+      total: res.total,
+      totalPages: res.totalPages,
+      page,
+      limit,
+    };
+  },
+
   async withdrawCommunicationConsent(phoneOrUserId: string, reason = "User requested withdrawal of communication consent"): Promise<boolean> {
     const now = new Date();
     if (process.env.DATABASE_URL) {
@@ -2436,23 +2578,5 @@ export const DataAccess = {
       deliveredAt: options?.deliveredAt ? options.deliveredAt.toISOString() : null,
     });
     return !!updated;
-  },
-
-  async getNotificationDeliveryLogs(recipientPhone?: string, limit = 50) {
-    if (process.env.DATABASE_URL) {
-      try {
-        const whereClause = recipientPhone ? { recipientPhone } : {};
-        return await prisma.notificationDeliveryLog.findMany({
-          where: whereClause,
-          take: limit,
-          orderBy: { createdAt: "desc" },
-        });
-      } catch (err) {
-        console.warn("[DATA-ACCESS WARNING] PostgreSQL getNotificationDeliveryLogs error:", err);
-      }
-    }
-    return recipientPhone
-      ? NotificationDeliveryLogStore.getByRecipient(recipientPhone)
-      : NotificationDeliveryLogStore.getAll(limit);
   },
 };

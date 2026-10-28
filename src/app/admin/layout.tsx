@@ -16,6 +16,7 @@ import {
   History,
   ShieldCheck,
   ShieldAlert,
+  Bell,
   ArrowLeft,
   LogOut,
   Menu,
@@ -91,6 +92,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { href: "/admin/content", label: "Homepage & Content", icon: FileEdit },
     { href: "/admin/packages", label: "Listing Packages", icon: Package },
     { href: "/admin/payments", label: "Payments & Gateway", icon: CreditCard },
+    { href: "/admin/notifications", label: "Notifications & Automation", icon: Bell },
     { href: "/admin/audit-logs", label: "Audit Logs", icon: History },
   ];
 

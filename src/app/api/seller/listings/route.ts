@@ -4,6 +4,7 @@ import { DataAccess } from "@/lib/data-access";
 import { PropertyCategoryType, ListingType } from "@/types";
 import { sendListingSubmittedEmail, sendAdminNewPropertyNotificationEmail } from "@/lib/email";
 import { NotificationService } from "@/lib/notification-service";
+import { NotificationQueue } from "@/lib/notification-queue";
 import { INITIAL_ADMIN_EMAIL } from "@/lib/constants";
 
 // GET /api/seller/listings - Retrieve all listings owned by the authenticated user
@@ -269,62 +270,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Phase 9: If submitted for review (not draft), dispatch notification and email
+    // Phase 9: Reliable Event-Driven Notification & Admin Automation
+    // Notification processing is decoupled from database persistence.
+    // External notification provider latency or downtime will never block or fail property submission.
     if (!isDraft) {
-      // Automated Transactional Notification (SMS & WhatsApp according to user consent)
-      if (effectiveSellerPhone) {
-        NotificationService.notifyPropertySubmitted({
-          userId: user.id,
-          phone: effectiveSellerPhone,
-          propertyId: createdProperty.id,
-          propertyTitle: createdProperty.title,
-          referenceCode: createdProperty.slug || createdProperty.id,
-        }).catch(err => console.error("[NOTIF ERROR] notifyPropertySubmitted:", err));
-      }
-
-      await DataAccess.createNotification({
-        userId: user.id,
-        title: "Listing Under Review",
-        message: `Your property "${createdProperty.title}" was submitted for review. Our moderation team will verify documentation within 24 hours.`,
-        type: "LISTING_SUBMITTED",
-        link: "/dashboard/seller/listings",
-        entityType: "PROPERTY",
-        entityId: createdProperty.id,
+      NotificationQueue.handleNewPropertySubmitted({
+        property: createdProperty,
+        sellerUser: {
+          id: user.id,
+          name: effectiveSellerName,
+          email: effectiveSellerEmail,
+          phoneNumber: effectiveSellerPhone,
+        },
       });
-
-      if (effectiveSellerEmail) {
-        await sendListingSubmittedEmail(
-          effectiveSellerEmail,
-          effectiveSellerName,
-          createdProperty.title,
-          createdProperty.id
-        );
-      }
-
-      // Phase 6 Action-Auth: Notify Administrator of new property submission
-      const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || INITIAL_ADMIN_EMAIL).toLowerCase().trim();
-      const adminUser = await DataAccess.findUserByEmail(adminEmail);
-      if (adminUser) {
-        await DataAccess.createNotification({
-          userId: adminUser.id,
-          title: "New Property Submitted for Moderation",
-          message: `${effectiveSellerName} submitted "${createdProperty.title}" in ${createdProperty.city} for review.`,
-          type: "ADMIN_MODERATION_PENDING",
-          link: "/admin/properties",
-          entityType: "PROPERTY",
-          entityId: createdProperty.id,
-        });
-      }
-
-      await sendAdminNewPropertyNotificationEmail(
-        adminEmail,
-        createdProperty.title,
-        effectiveSellerName,
-        effectiveSellerEmail,
-        createdProperty.city,
-        Number(createdProperty.price),
-        createdProperty.id
-      );
     }
 
     return NextResponse.json({

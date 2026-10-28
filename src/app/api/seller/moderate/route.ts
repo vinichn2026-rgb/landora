@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSessionUser } from "@/lib/auth";
 import { DataAccess } from "@/lib/data-access";
-import { NotificationService } from "@/lib/notification-service";
+import { NotificationQueue } from "@/lib/notification-queue";
 
-// POST /api/seller/moderate - Moderate property listing (Approve or Reject)
+// POST /api/seller/moderate - Moderate property listing (Approve, Request Info, or Reject)
 export async function POST(request: NextRequest) {
   try {
     const user = await getServerSessionUser();
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     if (!propertyId || !action) {
       return NextResponse.json(
-        { success: false, error: "Missing propertyId or action (APPROVE/REJECT)." },
+        { success: false, error: "Missing propertyId or action (APPROVE/REJECT/REQUEST_INFO)." },
         { status: 400 }
       );
     }
@@ -36,7 +36,9 @@ export async function POST(request: NextRequest) {
 
     if (actUpper === "APPROVE") {
       newStatus = "ACTIVE";
-    } else if (actUpper === "REJECT" || actUpper === "DETAILS_REQUIRED") {
+    } else if (actUpper === "REQUEST_INFO" || actUpper === "NEEDS_MORE_INFORMATION" || actUpper === "DETAILS_REQUIRED") {
+      newStatus = "NEEDS_MORE_INFORMATION";
+    } else if (actUpper === "REJECT") {
       newStatus = "REJECTED";
     } else if (actUpper === "VERIFY" || actUpper === "VERIFICATION_PENDING") {
       newStatus = "PENDING";
@@ -47,42 +49,22 @@ export async function POST(request: NextRequest) {
       user.id,
       newStatus,
       user.role,
-      (actUpper === "REJECT" || actUpper === "DETAILS_REQUIRED")
+      (actUpper === "REJECT" || actUpper === "REQUEST_INFO" || actUpper === "NEEDS_MORE_INFORMATION" || actUpper === "DETAILS_REQUIRED")
         ? (rejectionReason || "Listing details or documentation incomplete.")
         : undefined
     );
 
-    // Automated Transactional Notification (SMS & WhatsApp per consent)
-    if (updated?.sellerPhone) {
+    // Reliable Event-Driven Notification & Admin Automation (Decoupled & Non-blocking)
+    if (updated) {
       if (actUpper === "APPROVE") {
-        NotificationService.notifyPropertyApproved({
-          userId: updated.sellerId,
-          phone: updated.sellerPhone,
-          propertyId: updated.id,
-          propertyTitle: updated.title,
-        }).catch(err => console.error("[NOTIF] notifyPropertyApproved error:", err));
-
-        NotificationService.notifyPropertyPublished({
-          userId: updated.sellerId,
-          phone: updated.sellerPhone,
-          propertyId: updated.id,
-          propertyTitle: updated.title,
-        }).catch(err => console.error("[NOTIF] notifyPropertyPublished error:", err));
-      } else if (actUpper === "VERIFY" || actUpper === "VERIFICATION_PENDING") {
-        NotificationService.notifyVerificationPending({
-          userId: updated.sellerId,
-          phone: updated.sellerPhone,
-          propertyId: updated.id,
-          propertyTitle: updated.title,
-        }).catch(err => console.error("[NOTIF] notifyVerificationPending error:", err));
-      } else {
-        NotificationService.notifyDetailsRequired({
-          userId: updated.sellerId,
-          phone: updated.sellerPhone,
-          propertyId: updated.id,
-          propertyTitle: updated.title,
-          reason: rejectionReason || "Additional details required",
-        }).catch(err => console.error("[NOTIF] notifyDetailsRequired error:", err));
+        NotificationQueue.handlePropertyApproved({ property: updated, adminName: user.name });
+        NotificationQueue.handlePropertyPublished({ property: updated });
+      } else if (actUpper === "REQUEST_INFO" || actUpper === "NEEDS_MORE_INFORMATION" || actUpper === "DETAILS_REQUIRED") {
+        NotificationQueue.handleAdditionalDetailsRequired({
+          property: updated,
+          reason: rejectionReason || "Additional documentation or details required by moderation desk.",
+          adminName: user.name,
+        });
       }
     }
 
@@ -90,6 +72,8 @@ export async function POST(request: NextRequest) {
       success: true,
       message: newStatus === "ACTIVE" 
         ? "Property listing approved! It is now published live on search results." 
+        : newStatus === "NEEDS_MORE_INFORMATION"
+        ? "Requested additional information from seller. Notification dispatched."
         : "Property listing rejected with stated reason.",
       listing: updated,
     });
