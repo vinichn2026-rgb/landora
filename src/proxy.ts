@@ -7,10 +7,10 @@ const JWT_SECRET = new TextEncoder().encode(
 
 const SESSION_COOKIE_NAME = "landora_session";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Protect /dashboard and /admin routes via server middleware.
+  // Protect /dashboard and /admin routes via server proxy.
   // /post-property and action sections use interactive AuthModal popups for seamless OTP verification.
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isAdminRoute = pathname.startsWith("/admin");
