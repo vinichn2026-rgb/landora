@@ -33,7 +33,14 @@ import {
   Store,
   Warehouse,
   IndianRupee,
-  Edit3
+  Edit3,
+  Copy,
+  PhoneCall,
+  HelpCircle,
+  Send,
+  Share2,
+  ExternalLink,
+  MessageSquare,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -149,6 +156,8 @@ export default function PropertyPublishWizard({
     return `sub-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   });
   const [termsAccepted, setTermsAccepted] = useState(true);
+  const [copiedDetails, setCopiedDetails] = useState(false);
+  const [showFallbacks, setShowFallbacks] = useState(false);
 
   // Hidden file inputs for Camera and Gallery
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -626,30 +635,175 @@ export default function PropertyPublishWizard({
   ];
 
   // =========================================================================
-  // SUBMISSION SUCCESS VIEW
+  // PHASE 6: WHATSAPP PROPERTY SHARING & DETAILS GENERATOR
+  // =========================================================================
+
+  // Helper to build cleanly formatted, encoded WhatsApp share message
+  const buildWhatsAppShareMessage = () => {
+    const purposeStr =
+      formData.listingType === "RENT"
+        ? "For Rent"
+        : formData.listingType === "LEASE"
+        ? "For Lease"
+        : "For Sale";
+
+    const categoryMap: Record<string, string> = {
+      RESIDENTIAL_PLOT: "Residential Plot / Site",
+      AGRICULTURAL_LAND: "Agricultural / Farm Land",
+      COMMERCIAL_PLOT: "Commercial Plot / Land",
+      HOUSE: "Independent House",
+      VILLA: "Individual Villa",
+      APARTMENT: "Apartment / Flat",
+      COMMERCIAL_BUILDING: "Commercial Building",
+      INDUSTRIAL: "Industrial Land / Shed",
+    };
+    const categoryStr = categoryMap[formData.propertyType] || formData.propertyType;
+
+    const locParts = [formData.locality, formData.city, formData.state].filter(Boolean);
+    if (formData.pinCode) locParts.push(`PIN: ${formData.pinCode}`);
+    const locationStr = locParts.join(", ");
+
+    const formattedPrice =
+      Number(formData.price) > 0
+        ? `₹${Number(formData.price).toLocaleString("en-IN")}${
+            formatIndianPriceWords(formData.price) ? ` (${formatIndianPriceWords(formData.price)})` : ""
+          }`
+        : "Price on Request";
+
+    const areaStr = `${formData.area} ${formData.areaUnit.toUpperCase()}${
+      formData.pricePerUnit ? ` • Rate: ${formData.pricePerUnit}` : ""
+    }`;
+
+    const specifics: string[] = [];
+    if (isPlotOrLand) {
+      if (formData.approvalStatus) specifics.push(`• Approval: ${formData.approvalStatus}`);
+      if (formData.facing) specifics.push(`• Facing: ${formData.facing}`);
+      if (formData.roadWidthFt) specifics.push(`• Road Width: ${formData.roadWidthFt} ft`);
+      if (formData.plotDimensions) specifics.push(`• Dimensions: ${formData.plotDimensions}`);
+      if (formData.gatedLayout) specifics.push(`• Gated Layout: Yes`);
+      if (formData.boundaryWall) specifics.push(`• Fenced / Boundary Wall: Yes`);
+    } else if (isResidentialBuilding) {
+      if (formData.bedrooms) specifics.push(`• BHK: ${formData.bedrooms} BHK`);
+      if (formData.bathrooms) specifics.push(`• Bathrooms: ${formData.bathrooms}`);
+      if (formData.furnishing) specifics.push(`• Furnishing: ${formData.furnishing}`);
+      if (formData.builtUpArea) specifics.push(`• Built-up Area: ${formData.builtUpArea} sq.ft`);
+      if (formData.floorNo) specifics.push(`• Floor: ${formData.floorNo} of ${formData.totalFloors || "N/A"}`);
+    } else if (isCommercial) {
+      if (formData.commercialCategory) specifics.push(`• Category: ${formData.commercialCategory}`);
+      if (formData.commercialSuitableFor && formData.commercialSuitableFor.length > 0) {
+        specifics.push(`• Suitable For: ${formData.commercialSuitableFor.join(", ")}`);
+      }
+      if (formData.washrooms) specifics.push(`• Washrooms: ${formData.washrooms}`);
+    }
+
+    if (isRent) {
+      if (formData.securityDeposit) specifics.push(`• Security Deposit: ₹${Number(formData.securityDeposit).toLocaleString("en-IN")}`);
+      if (formData.maintenanceMonthly) specifics.push(`• Maintenance: ${formData.maintenanceMonthly}`);
+      if (formData.preferredTenant) specifics.push(`• Preferred Tenant: ${formData.preferredTenant}`);
+    }
+
+    let photosNote = "";
+    if (formData.photosViaWhatsApp) {
+      photosNote = "• Photos: Sharing photos directly in this WhatsApp chat 📸";
+    } else if (formData.images && formData.images.length > 0) {
+      photosNote = `• Photos: ${formData.images.length} photo(s) uploaded and saved in Landora cloud database ✅`;
+    } else {
+      photosNote = "• Photos: Pending photo upload";
+    }
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://landora.in";
+    const summaryLink = submittedProperty?.slug
+      ? `${origin}/properties/${submittedProperty.slug}`
+      : `${origin}/sell/status?ref=${encodeURIComponent(submissionCode)}`;
+
+    const messageLines = [
+      `*🏡 NEW PROPERTY SUBMISSION - LANDORA*`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `*Reference ID:* #${submissionCode}`,
+      `*Purpose:* ${purposeStr}`,
+      `*Category:* ${categoryStr}`,
+      `*Title:* ${formData.title || `${categoryStr} in ${formData.locality || formData.city}`}`,
+      `*Location:* ${locationStr}`,
+      `*Expected Price:* ${formattedPrice}`,
+      `*Area:* ${areaStr}`,
+      ...(specifics.length > 0 ? [`*Property Details:*`, ...specifics] : []),
+      photosNote,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `*Owner / Contact:* ${formData.sellerName} (${formData.sellerPhone})`,
+      `*Status Tracking Link:* ${summaryLink}`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `Hello Landora Team, I have submitted this property on Landora. Please review, verify, and guide me on next steps.`,
+    ];
+
+    return messageLines.join("\n");
+  };
+
+  // Helper for separate "Help on WhatsApp" option during form filling
+  const getHelpOnWhatsAppUrl = (currentStep: number) => {
+    const stepObj = stepsList.find(s => s.num === currentStep);
+    const stepTitle = stepObj ? stepObj.title : `Step ${currentStep}`;
+    const cleanNumber = SUPPORT_WHATSAPP.replace(/\D/g, "");
+    const helpMsg =
+      language === "ta"
+        ? `வணக்கம் லேண்டோரா குழு, நான் சொத்து பதிவிடும் படிவத்தில் Step ${currentStep} (${stepTitle}) பூர்த்தி செய்ய உதவி தேவைப்படுகிறது. தயவுசெய்து வழிகாட்டவும்.`
+        : `Hello Landora Support, I am filling out Step ${currentStep} (${stepTitle}) on the Landora Post Property form and need help. Please assist me.`;
+    return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(helpMsg)}`;
+  };
+
+  // Copy details fallback
+  const handleCopyDetails = async () => {
+    try {
+      const msg = buildWhatsAppShareMessage();
+      if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(msg);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = msg;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopiedDetails(true);
+      setTimeout(() => setCopiedDetails(false), 3000);
+    } catch (err) {
+      console.error("Failed to copy details", err);
+    }
+  };
+
+  // =========================================================================
+  // SUBMISSION SUCCESS VIEW (PHASE 6)
   // =========================================================================
   if (submissionSuccess) {
-    const waText = formData.photosViaWhatsApp
-      ? `வணக்கம் லேண்டோரா குழு, எனது பதிவு எண் #${submissionCode} (${formData.title}). இதற்கான சொத்து புகைப்படங்களை அனுப்ப வந்துள்ளேன்.`
-      : `Hello Landora Team, I just submitted my property #${submissionCode} (${formData.title}). Please guide me on next steps.`;
-    const waUrl = `https://wa.me/${SUPPORT_WHATSAPP.replace(/\D/g, "")}?text=${encodeURIComponent(waText)}`;
+    const cleanWhatsAppNumber = SUPPORT_WHATSAPP.replace(/\D/g, "");
+    const shareMessage = buildWhatsAppShareMessage();
+    const waShareUrl = `https://wa.me/${cleanWhatsAppNumber}?text=${encodeURIComponent(shareMessage)}`;
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://landora.in";
+    const statusUrl = `/sell/status?ref=${encodeURIComponent(submissionCode)}`;
 
     return (
       <div className="max-w-2xl mx-auto px-4 py-8 animate-in fade-in">
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-6 sm:p-10 text-center">
-          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5 border-4 border-emerald-50">
+          
+          {/* Success Badge & Animation */}
+          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5 border-4 border-emerald-50 shadow-inner">
             <CheckCircle2 className="w-10 h-10 text-emerald-700" />
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
-            <span className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
-              Reference ID: #{submissionCode}
+          {/* Status Badges */}
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 shadow-2xs">
+              <span>Reference ID:</span>
+              <span className="font-mono font-black text-emerald-900">#{submissionCode}</span>
             </span>
-            <span className="inline-block px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 text-[11px] font-bold border border-blue-200 uppercase tracking-wider">
+            <span className="inline-block px-3 py-1.5 rounded-full bg-blue-50 text-blue-800 text-[11px] font-bold border border-blue-200 uppercase tracking-wider">
               Status: SUBMITTED
             </span>
-            <span className="inline-block px-2.5 py-1 rounded-full bg-slate-50 text-slate-600 text-[11px] font-medium border border-slate-200">
-              ✓ Database Record Saved
+            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-50 text-slate-700 text-[11px] font-medium border border-slate-200">
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Database Record Saved</span>
             </span>
           </div>
 
@@ -658,55 +812,262 @@ export default function PropertyPublishWizard({
           </h2>
 
           <p className="text-slate-600 text-sm mt-2 max-w-md mx-auto leading-relaxed">
-            {t(
-              "post.subSuccessDesc",
-              "Our verification team will review and approve your listing shortly. Genuine buyers will be able to call you directly."
-            )}
+            {language === "ta"
+              ? "உங்கள் சொத்து விவரங்கள் லேண்டோரா தரவுத்தளத்தில் வெற்றிகரமாகப் பதிவு செய்யப்பட்டுள்ளன. சரிபார்ப்பை விரைவுபடுத்த கீழே உள்ள வாட்ஸ்அப் பட்டனைத் தட்டவும்."
+              : "Your property details have been saved to the Landora database. Send your submission details directly to our verification team on WhatsApp to fast-track your listing."}
           </p>
 
-          {/* WhatsApp Photo Followup card if photos were skipped */}
-          {formData.photosViaWhatsApp && (
-            <div className="mt-6 p-4 bg-emerald-50 border-2 border-dashed border-[#25D366] rounded-2xl text-left">
-              <div className="flex items-start gap-3">
-                <MessageCircle className="w-6 h-6 text-[#25D366] shrink-0 mt-0.5" />
+          {/* PRIMARY BUTTON: Exactly "Send Details to Landora on WhatsApp" */}
+          <div className="mt-7">
+            <a
+              href={waShareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-4 px-6 rounded-2xl bg-[#25D366] hover:bg-[#1ebd59] text-white font-black text-base sm:text-lg shadow-lg hover:shadow-xl transition flex items-center justify-center gap-3 active:scale-[0.99] group cursor-pointer"
+            >
+              <MessageCircle className="w-6 h-6 fill-white text-[#25D366] shrink-0" />
+              <div className="flex flex-col text-left">
+                <span className="leading-tight tracking-wide">Send Details to Landora on WhatsApp</span>
+                <span className="text-[11px] font-semibold text-white/90">
+                  {language === "ta"
+                    ? "வாட்ஸ்அப்பில் லேண்டோராவிற்கு விவரங்களை அனுப்பவும்"
+                    : "Fast-track review & buyer verification via WhatsApp"}
+                </span>
+              </div>
+              <ExternalLink className="w-4 h-4 ml-auto opacity-80 group-hover:translate-x-0.5 transition" />
+            </a>
+          </div>
+
+          {/* CRITICAL INSTRUCTIONAL BOX: Clearly instruct users to press Send in WhatsApp */}
+          <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 text-left my-5 shadow-xs">
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-amber-500 text-white font-extrabold flex items-center justify-center shrink-0 text-sm shadow-xs mt-0.5">
+                !
+              </div>
+              <div className="space-y-2.5 flex-1">
                 <div>
-                  <h4 className="text-sm font-bold text-[#0c4a3e]">
-                    {language === "ta" ? "புகைப்படங்களை வாட்ஸ்அப்பில் அனுப்பவும்" : "Send Your Photos on WhatsApp"}
+                  <h4 className="text-sm sm:text-base font-extrabold text-amber-950">
+                    {language === "ta" ? "முக்கியமானது: வாட்ஸ்அப்பில் 'Send' பட்டனை அழுத்தவும்!" : "Important: Remember to Press 'Send' in WhatsApp!"}
                   </h4>
-                  <p className="text-xs text-slate-600 mt-1">
+                  <p className="text-xs sm:text-sm text-amber-900 leading-relaxed mt-0.5">
                     {language === "ta"
-                      ? "நீங்கள் புகைப்படங்களை பின்னர் அனுப்புவதாகக் கூறியுள்ளீர்கள். உங்கள் மொபைல் கேலரியில் உள்ள படங்களை எங்கள் வாட்ஸ்அப் எண்ணுக்கு உடனே பகிருங்கள்."
-                      : "You opted to share property photos via WhatsApp. Tap below to send them straight to our team."}
+                      ? "மேலே உள்ள பட்டனைத் தட்டும்போது உங்கள் சொத்து விவரங்களுடன் வாட்ஸ்அப் மட்டுமே திறக்கும். செய்தி தானாக அனுப்பப்படாது — வாட்ஸ்அப் திறந்தவுடன் கட்டாயம் 'Send' (➤) பட்டனை அழுத்தவும்."
+                      : "Tapping the button opens WhatsApp with your prefilled property details, but DOES NOT send it automatically. You must tap the Send (➤) button inside WhatsApp so our verification team receives your submission."}
                   </p>
-                  <a
-                    href={waUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#25D366] text-white font-bold text-xs shadow-xs hover:bg-[#1ebd59] transition"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>{language === "ta" ? "வாட்ஸ்அப்பில் படங்களை அனுப்ப" : "Send Photos on WhatsApp Now"}</span>
-                  </a>
+                </div>
+
+                {/* 2-Step Action Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs">
+                  <div className="bg-white/90 rounded-xl p-3 border border-amber-200 flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-900 font-extrabold flex items-center justify-center text-xs shrink-0">
+                      1
+                    </span>
+                    <div>
+                      <div className="font-bold text-slate-900">
+                        {language === "ta" ? "பட்டனை தட்டுங்கள்" : "Tap Button Above"}
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {language === "ta" ? "வாட்ஸ்அப்பில் செய்தி தயாராகும்" : "Opens WhatsApp with details"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/90 rounded-xl p-3 border border-emerald-200 flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center text-xs shrink-0">
+                      2
+                    </span>
+                    <div>
+                      <div className="font-bold text-emerald-950">
+                        {language === "ta" ? "Send (➤) அழுத்தவும்" : "Press 'Send' (➤)"}
+                      </div>
+                      <div className="text-[11px] text-emerald-700">
+                        {language === "ta" ? "செய்தி எங்கள் குழுவிற்கு வரும்" : "Delivers to Landora desk"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-amber-800/90 font-medium italic">
+                  {language === "ta"
+                    ? "* கவனத்திற்கு: வாட்ஸ்அப் திறந்திருப்பதால் மட்டுமே செய்தி அனுப்பப்பட்டதாக கருதப்படாது."
+                    : "* Note: Simply opening WhatsApp does not transmit your message. Tapping Send is required."}
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Action Buttons */}
+          {/* Photo Storage Architecture Note */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left text-xs sm:text-sm my-4">
+            {formData.photosViaWhatsApp ? (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 text-emerald-700 mt-0.5">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900">
+                    {language === "ta" ? "வாட்ஸ்அப்பில் புகைப்படங்களை அனுப்பவும்" : "Photos to be sent via WhatsApp"}
+                  </div>
+                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                    {language === "ta"
+                      ? "நீங்கள் படிவத்தில் புகைப்படங்களை தவிர்க்க தேர்வுசெய்துள்ளீர்கள். வாட்ஸ்அப் திறந்ததும், உங்கள் கேலரியில் உள்ள சொத்து புகைப்படங்களை 📎 (Attachment) மூலம் எங்கள் எண்ணிற்கு அனுப்பவும்."
+                      : "You opted to share photos via WhatsApp. In the WhatsApp chat that opens, tap the attachment (📎) icon to send property photos directly from your phone gallery."}
+                  </p>
+                </div>
+              </div>
+            ) : formData.images && formData.images.length > 0 ? (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 text-emerald-700 mt-0.5">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900">
+                    {language === "ta"
+                      ? `${formData.images.length} புகைப்படங்கள் லேண்டோரா தரவுத்தளத்தில் சேமிக்கப்பட்டுள்ளன`
+                      : `${formData.images.length} photo(s) securely stored in Landora cloud database`}
+                  </div>
+                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                    {language === "ta"
+                      ? `பதிவு எண் #${submissionCode} உடன் இணைக்கப்பட்டுள்ளது. படங்களை வாட்ஸ்அப்பில் மீண்டும் பதிவேற்ற வேண்டிய அவசியமில்லை.`
+                      : `Stored under listing reference #${submissionCode}. Our verification team accesses them directly from your record.`}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-slate-200 flex items-center justify-center shrink-0 text-slate-600 mt-0.5">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900">
+                    {language === "ta" ? "புகைப்படங்கள் எதுவும் இணைக்கப்படவில்லை" : "No photos uploaded yet"}
+                  </div>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    {language === "ta"
+                      ? "விரும்பினால் வாட்ஸ்அப் அரட்டையில் புகைப்படங்களை அனுப்பலாம்."
+                      : "You can send property photos anytime in your WhatsApp chat with our verification team."}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Submission Details Summary Box */}
+          <div className="p-4 rounded-2xl bg-white border border-slate-200 text-left my-4 shadow-2xs">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                {language === "ta" ? "பதிவு செய்யப்பட்ட விவரங்கள்:" : "Submitted Property Summary:"}
+              </span>
+              <span className="text-[11px] font-bold text-[#0c4a3e]">
+                {formData.listingType === "RENT" ? "Rent Listing" : "Sale Listing"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-slate-50 p-2 rounded-lg">
+                <div className="text-[10px] text-slate-400">Title</div>
+                <div className="font-semibold text-slate-800 truncate">{formData.title || "Property"}</div>
+              </div>
+              <div className="bg-slate-50 p-2 rounded-lg">
+                <div className="text-[10px] text-slate-400">Price</div>
+                <div className="font-semibold text-slate-800 truncate">
+                  {Number(formData.price) > 0 ? `₹${Number(formData.price).toLocaleString("en-IN")}` : "Negotiable"}
+                </div>
+              </div>
+              <div className="bg-slate-50 p-2 rounded-lg">
+                <div className="text-[10px] text-slate-400">Location</div>
+                <div className="font-semibold text-slate-800 truncate">{formData.locality ? `${formData.locality}, ${formData.city}` : formData.city}</div>
+              </div>
+              <div className="bg-slate-50 p-2 rounded-lg">
+                <div className="text-[10px] text-slate-400">Area</div>
+                <div className="font-semibold text-slate-800 truncate">{formData.area} {formData.areaUnit.toUpperCase()}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* FALLBACK OPTIONS IF WHATSAPP IS UNAVAILABLE */}
+          <div className="mt-6 pt-5 border-t border-slate-200 text-left">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                {language === "ta" ? "வாட்ஸ்அப் வேலை செய்யவில்லையா? மாற்று வழிகள்:" : "WhatsApp Unavailable? Alternative Options:"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* 1. Copy Details */}
+              <button
+                type="button"
+                onClick={handleCopyDetails}
+                className={`p-3 rounded-xl border text-left transition flex items-center gap-2.5 cursor-pointer ${
+                  copiedDetails
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                    : "bg-white border-slate-200 hover:border-slate-300 text-slate-800 hover:bg-slate-50"
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${copiedDetails ? "bg-emerald-200 text-emerald-900" : "bg-slate-100 text-slate-600"}`}>
+                  {copiedDetails ? <Check className="w-4 h-4 text-emerald-800" /> : <Copy className="w-4 h-4" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold truncate">
+                    {copiedDetails
+                      ? language === "ta" ? "நகலெடுக்கப்பட்டது! ✓" : "Copied to Clipboard! ✓"
+                      : language === "ta" ? "விவரங்களை நகலெடு" : "Copy Details"}
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate">
+                    {language === "ta" ? "முழு செய்தியையும் நகலெடுக்க" : "Copy full message"}
+                  </div>
+                </div>
+              </button>
+
+              {/* 2. Call Support Desk */}
+              <a
+                href={`tel:${SUPPORT_PHONE}`}
+                className="p-3 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-800 transition flex items-center gap-2.5 cursor-pointer"
+              >
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                  <PhoneCall className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold truncate">
+                    {language === "ta" ? "தொலைபேசி அழைப்பு" : "Call Support Desk"}
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate">
+                    {SUPPORT_PHONE_DISPLAY}
+                  </div>
+                </div>
+              </a>
+
+              {/* 3. Send via Email */}
+              <a
+                href={`mailto:support@landora.in?subject=${encodeURIComponent(`Property Submission Ref #${submissionCode} - ${formData.title || formData.propertyType}`)}&body=${encodeURIComponent(shareMessage)}`}
+                className="p-3 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-800 transition flex items-center gap-2.5 cursor-pointer"
+              >
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold truncate">
+                    {language === "ta" ? "மின்னஞ்சல் அனுப்ப" : "Email Details"}
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate">
+                    support@landora.in
+                  </div>
+                </div>
+              </a>
+            </div>
+          </div>
+
+          {/* Secondary Actions: Dashboard & Status Links */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8">
-            <a
-              href={waUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-3 px-4 rounded-xl bg-[#0c4a3e] hover:bg-[#08332b] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition"
+            <Link
+              href={statusUrl}
+              className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition"
             >
-              <MessageCircle className="w-4 h-4 text-[#25D366]" />
-              <span>{language === "ta" ? "லேண்டோரா குழுவுடன் பேச" : "Chat with Landora Support"}</span>
-            </a>
+              <span>{language === "ta" ? "நிலை பார்க்க (Track Status)" : "Track Status Online"}</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
 
             <Link
               href="/dashboard/seller/listings"
-              className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition"
+              className="py-3 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0c4a3e] border border-emerald-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition"
             >
               <span>{language === "ta" ? "எனது பதிவுகளை பார்க்க" : "View My Listings"}</span>
               <ArrowRight className="w-4 h-4" />
@@ -745,32 +1106,48 @@ export default function PropertyPublishWizard({
             </p>
           </div>
 
-          {/* Reset / Clear draft button */}
-          {!isEditing && (
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm(language === "ta" ? "படிவத்தை மீட்டமைக்க விரும்புகிறீர்களா?" : "Clear draft and reset form?")) {
-                  localStorage.removeItem(DRAFT_STORAGE_KEY);
-                  setFormData(prev => ({
-                    ...prev,
-                    title: "",
-                    description: "",
-                    price: "",
-                    area: "",
-                    locality: "",
-                    images: [],
-                  }));
-                  setStep(1);
-                }
-              }}
-              title="Reset Form"
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-rose-600 transition p-1.5 rounded-lg border border-slate-200 bg-white"
+          {/* Right Header Actions: Help on WhatsApp & Reset */}
+          <div className="flex items-center gap-2">
+            {/* Phase 6: Separate Help on WhatsApp option during form filling */}
+            <a
+              href={getHelpOnWhatsAppUrl(step)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={language === "ta" ? "படிவம் நிரப்ப வாட்ஸ்அப் உதவி பெற" : "Get assistance on WhatsApp"}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0c4a3e] border border-emerald-200 text-xs font-bold transition shadow-2xs"
             >
-              <RotateCcw className="w-3 h-3" />
-              <span className="hidden sm:inline">Reset</span>
-            </button>
-          )}
+              <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
+              <span className="hidden sm:inline">{language === "ta" ? "வாட்ஸ்அப் உதவி" : "Help on WhatsApp"}</span>
+              <span className="sm:hidden">{language === "ta" ? "உதவி" : "Help"}</span>
+            </a>
+
+            {/* Reset / Clear draft button */}
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(language === "ta" ? "படிவத்தை மீட்டமைக்க விரும்புகிறீர்களா?" : "Clear draft and reset form?")) {
+                    localStorage.removeItem(DRAFT_STORAGE_KEY);
+                    setFormData(prev => ({
+                      ...prev,
+                      title: "",
+                      description: "",
+                      price: "",
+                      area: "",
+                      locality: "",
+                      images: [],
+                    }));
+                    setStep(1);
+                  }
+                }}
+                title="Reset Form"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-rose-600 transition p-1.5 rounded-lg border border-slate-200 bg-white"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span className="hidden sm:inline">Reset</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 6-Step Desktop Progress Indicator */}
@@ -2348,6 +2725,23 @@ export default function PropertyPublishWizard({
               )}
             </button>
           )}
+        </div>
+
+        {/* Phase 6: Separate Help on WhatsApp option during form filling */}
+        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center">
+          <a
+            href={getHelpOnWhatsAppUrl(step)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[#0c4a3e] transition"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-emerald-600" />
+            <span>
+              {language === "ta"
+                ? "படிவத்தை நிரப்ப உதவி தேவையா? வாட்ஸ்அப்பில் கேட்கவும்"
+                : "Need help completing this step? Ask our team on WhatsApp"}
+            </span>
+          </a>
         </div>
       </div>
     </div>

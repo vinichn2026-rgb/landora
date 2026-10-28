@@ -1,114 +1,126 @@
 "use client";
 
-import { CheckCircle2, Clock, MapPin, IndianRupee, Image as ImageIcon, ChevronRight, Edit3, ShieldAlert, Check } from "lucide-react";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  CheckCircle2,
+  Clock,
+  MapPin,
+  IndianRupee,
+  Image as ImageIcon,
+  ChevronRight,
+  ShieldAlert,
+  Check,
+  MessageCircle,
+  ExternalLink,
+  ArrowLeft,
+} from "lucide-react";
 import Link from "next/link";
+import { SUPPORT_WHATSAPP } from "@/lib/constants";
 
-export default function SubmissionStatusPage() {
+function StatusContent() {
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get("ref") || "";
+
   const steps = [
     {
-      title: "Details Submitted",
+      title: "Details Submitted & Database Persisted",
       status: "completed",
-      description: "Property information and media received.",
-      icon: <CheckCircle2 className="w-6 h-6 text-green-600" />
+      description: "Property information, pricing, and media records safely saved.",
+      icon: <CheckCircle2 className="w-6 h-6 text-green-600" />,
     },
     {
       title: "Document & Boundary Verification",
       status: "in-progress",
-      description: "Our legal team is reviewing ownership documents and map coordinates.",
-      icon: <Clock className="w-6 h-6 text-blue-600" />
+      description: "Our legal and field verification team is reviewing records against land portal databases.",
+      icon: <Clock className="w-6 h-6 text-blue-600" />,
     },
     {
-      title: "Listing Live",
+      title: "Listing Live & Published",
       status: "pending",
-      description: "Property goes live on the marketplace for verified buyers.",
-      icon: <div className="w-6 h-6 rounded-full border-2 border-neutral-300 bg-neutral-50" />
+      description: "Property goes live on the Landora marketplace for verified genuine buyers.",
+      icon: <div className="w-6 h-6 rounded-full border-2 border-neutral-300 bg-neutral-50" />,
     },
     {
-      title: "Buyer Leads Connected",
+      title: "Buyer Inquiries Connected",
       status: "pending",
-      description: "Direct connections with interested and verified buyers.",
-      icon: <div className="w-6 h-6 rounded-full border-2 border-neutral-300 bg-neutral-50" />
-    }
+      description: "Direct connections with pre-screened buyers looking in your area.",
+      icon: <div className="w-6 h-6 rounded-full border-2 border-neutral-300 bg-neutral-50" />,
+    },
   ];
 
+  const waNumber = SUPPORT_WHATSAPP.replace(/\D/g, "");
+  const waHelpText = refCode
+    ? `Hello Landora Support, I am checking the status of my property submission #${refCode}. Please guide me on next steps.`
+    : `Hello Landora Support, I have a query about my property submission.`;
+  const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(waHelpText)}`;
+
   return (
-    <div className="min-h-screen bg-neutral-50 py-12 px-4 sm:px-6">
-      <div className="max-w-2xl mx-auto space-y-8">
+    <div className="min-h-screen bg-neutral-50 py-10 px-4 sm:px-6">
+      <div className="max-w-2xl mx-auto space-y-6">
         
+        {/* Navigation Breadcrumb */}
+        <div className="flex items-center justify-between text-xs text-neutral-500">
+          <Link href="/post-property" className="inline-flex items-center gap-1 hover:text-neutral-900 font-semibold transition">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Post Property Portal</span>
+          </Link>
+          <span className="font-mono bg-neutral-200/80 px-2.5 py-1 rounded-md text-neutral-700 font-bold">
+            {refCode ? `Ref: #${refCode}` : "Submission Tracker"}
+          </span>
+        </div>
+
         {/* Header Section */}
-        <div className="text-center space-y-4 mb-8">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="text-center space-y-3 mb-6">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-green-50 shadow-inner">
             <Check className="w-10 h-10 text-green-600" />
           </div>
-          <h1 className="text-3xl font-bold text-neutral-900">Submission Successful!</h1>
-          <p className="text-neutral-500 text-lg">Your property details have been securely received.</p>
+          <div className="inline-block px-3 py-1 bg-green-50 text-green-800 text-xs font-bold rounded-full border border-green-200">
+            STATUS: SUBMITTED (UNDER REVIEW)
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-neutral-900 tracking-tight">
+            Submission Status
+          </h1>
+          <p className="text-neutral-600 text-sm max-w-md mx-auto">
+            {refCode
+              ? `Your property submission #${refCode} is undergoing review by the Landora verification desk.`
+              : "Your property details have been securely received and recorded."}
+          </p>
         </div>
 
         {/* SLA Notice Banner */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 items-start animate-in fade-in slide-in-from-bottom-2">
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-5 flex gap-3.5 items-start">
           <ShieldAlert className="w-6 h-6 text-blue-600 shrink-0 mt-0.5" />
           <div>
-            <h3 className="font-semibold text-blue-900 mb-1">Verification in Progress</h3>
-            <p className="text-sm text-blue-800 leading-relaxed">
-              Our verification team verifies records against state portal databases within <strong>24 hours</strong>. You will be notified via WhatsApp and email once approved.
+            <h3 className="font-bold text-blue-900 text-sm mb-1">Verification SLA: Within 24 Hours</h3>
+            <p className="text-xs sm:text-sm text-blue-800 leading-relaxed">
+              Our team verifies land records against official survey registries within <strong>24 business hours</strong>. You will receive updates via WhatsApp and SMS per your preferences.
             </p>
           </div>
         </div>
 
-        {/* Listing Preview Card */}
-        <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm flex flex-col sm:flex-row gap-6 items-center sm:items-start">
-          <div className="w-full sm:w-32 h-32 bg-neutral-100 rounded-xl flex items-center justify-center shrink-0 border border-neutral-200 overflow-hidden relative">
-            {/* Mock Thumbnail Image placeholder */}
-            <ImageIcon className="w-10 h-10 text-neutral-300" />
-            <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm">
-              ENTRANCE
-            </div>
-          </div>
-          
-          <div className="flex-1 w-full space-y-3">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="font-bold text-lg text-neutral-900">5.5 Acres Agricultural Land</h3>
-                <div className="flex items-center gap-1 text-sm text-neutral-500 mt-1">
-                  <MapPin className="w-4 h-4" /> Madurai District
-                </div>
-              </div>
-              <button className="p-2 text-neutral-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition" title="Edit Details">
-                <Edit3 className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="flex items-center gap-4 text-sm font-medium">
-              <div className="bg-neutral-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-neutral-700">
-                <span className="text-neutral-400">Survey No:</span> 142/2A
-              </div>
-              <div className="bg-green-50 px-3 py-1.5 rounded-lg flex items-center text-green-700">
-                <IndianRupee className="w-3.5 h-3.5 mr-0.5" /> 50,00,000
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Progress Stepper Component */}
-        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-neutral-200">
-          <h2 className="text-lg font-bold text-neutral-900 mb-6">Listing Status</h2>
+        {/* Progress Stepper */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-neutral-200">
+          <h2 className="text-base sm:text-lg font-black text-neutral-900 mb-6 tracking-tight">
+            Verification & Publishing Workflow
+          </h2>
           
           <div className="space-y-0 relative">
-            <div className="absolute top-4 bottom-8 left-[11px] w-0.5 bg-neutral-200"></div>
+            <div className="absolute top-4 bottom-8 left-[11px] w-0.5 bg-neutral-200" />
             
             {steps.map((step, idx) => (
-              <div key={idx} className="relative flex gap-6 pb-8 last:pb-0">
+              <div key={idx} className="relative flex gap-5 pb-8 last:pb-0">
                 <div className="relative z-10 bg-white pt-1">
                   {step.icon}
                 </div>
-                <div className={`pt-1 ${step.status === 'pending' ? 'opacity-50' : ''}`}>
-                  <h4 className={`font-bold ${
-                    step.status === 'completed' ? 'text-green-700' : 
-                    step.status === 'in-progress' ? 'text-blue-700' : 'text-neutral-700'
+                <div className={`pt-1 ${step.status === "pending" ? "opacity-50" : ""}`}>
+                  <h4 className={`text-sm font-bold ${
+                    step.status === "completed" ? "text-green-700" : 
+                    step.status === "in-progress" ? "text-blue-700" : "text-neutral-700"
                   }`}>
                     {step.title}
                   </h4>
-                  <p className="text-sm text-neutral-500 mt-1">{step.description}</p>
+                  <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed">{step.description}</p>
                 </div>
               </div>
             ))}
@@ -116,13 +128,52 @@ export default function SubmissionStatusPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="pt-4 flex flex-col items-center gap-4">
-          <Link href="/dashboard" className="w-full sm:w-auto px-8 py-4 bg-neutral-900 text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-neutral-800 transition shadow-sm">
-            Go to Seller Dashboard <ChevronRight className="w-5 h-5" />
-          </Link>
+        <div className="space-y-3 pt-2">
+          {/* WhatsApp Support Action */}
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3.5 px-6 rounded-2xl bg-[#25D366] hover:bg-[#1ebd59] text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2.5 active:scale-[0.99]"
+          >
+            <MessageCircle className="w-5 h-5 fill-white text-[#25D366]" />
+            <span>Chat with Landora Verification Desk on WhatsApp</span>
+            <ExternalLink className="w-4 h-4 ml-1 opacity-80" />
+          </a>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Link
+              href="/dashboard/seller/listings"
+              className="py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition"
+            >
+              <span>View in Seller Dashboard</span>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+
+            <Link
+              href="/post-property"
+              className="py-3 px-4 rounded-xl bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-800 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition"
+            >
+              <span>+ Post Another Property</span>
+            </Link>
+          </div>
         </div>
 
       </div>
     </div>
+  );
+}
+
+export default function SubmissionStatusPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6 text-sm text-neutral-500">
+          Loading submission status...
+        </div>
+      }
+    >
+      <StatusContent />
+    </Suspense>
   );
 }
