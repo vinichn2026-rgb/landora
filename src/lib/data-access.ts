@@ -179,11 +179,11 @@ export const DataAccess = {
         let orderBy: any = [{ isFeatured: "desc" }, { createdAt: "desc" }];
         if (filters?.sortBy === "newest") {
           orderBy = [{ createdAt: "desc" }];
-        } else if (filters?.sortBy === "price_asc") {
+        } else if (filters?.sortBy === "price_asc" || filters?.sortBy === "price-asc") {
           orderBy = [{ price: "asc" }];
-        } else if (filters?.sortBy === "price_desc") {
+        } else if (filters?.sortBy === "price_desc" || filters?.sortBy === "price-desc") {
           orderBy = [{ price: "desc" }];
-        } else if (filters?.sortBy === "area_desc") {
+        } else if (filters?.sortBy === "area_desc" || filters?.sortBy === "area-desc") {
           orderBy = [{ area: "desc" }];
         }
 

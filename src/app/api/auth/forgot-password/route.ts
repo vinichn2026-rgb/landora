@@ -37,15 +37,21 @@ export async function POST(request: NextRequest) {
     // Phase 9: Dispatch password reset email
     const dispatchResult = await sendPasswordResetEmail(user.email, user.name, resetToken);
 
+    const isProd = process.env.NODE_ENV === "production";
+
     return NextResponse.json({
       success: true,
-      message: "Password reset request initiated.",
+      message: "If an account exists with this email, password reset instructions have been sent.",
       emailProviderConfigured: dispatchResult.providerConfigured,
       providerNotice: dispatchResult.providerConfigured
         ? "Password reset email dispatched to your inbox."
+        : isProd
+        ? "Password reset email dispatched."
         : "Live email provider not configured. For development/testing, use the direct reset link below.",
-      devResetToken: resetToken,
-      resetUrl: `/reset-password?token=${encodeURIComponent(resetToken)}`,
+      ...(isProd ? {} : {
+        devResetToken: resetToken,
+        resetUrl: `/reset-password?token=${encodeURIComponent(resetToken)}`,
+      }),
     });
   } catch (error) {
     console.error("[API ERROR] /api/auth/forgot-password:", error);

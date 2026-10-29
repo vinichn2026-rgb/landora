@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DataAccess } from "@/lib/data-access";
 import { verifyPasswordResetToken, hashPassword } from "@/lib/auth";
+import { applyRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Brute-force protection: max 5 reset attempts per 5 minutes per IP
+    const rateLimited = applyRateLimit(request, "auth_reset_password", 5, 300000);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
     const { token, newPassword } = body;
 

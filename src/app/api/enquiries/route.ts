@@ -49,20 +49,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Verify property exists and bind inquiry to authentic seller
+    const targetProperty = await DataAccess.getPropertyById(propertyId);
+    if (!targetProperty) {
+      return NextResponse.json(
+        { success: false, error: "The requested property listing could not be found." },
+        { status: 404 }
+      );
+    }
+
     const result = await DataAccess.createEnquiry({
       propertyId,
       buyerName: effectiveBuyerName,
       buyerEmail: effectiveBuyerEmail,
       buyerPhone: effectiveBuyerPhone || "Not specified",
       message: message.trim(),
-      sellerId: sellerId || "owner-01",
+      sellerId: targetProperty.sellerId,
     });
 
     if (result.success) {
       // Phase 6 Action-Auth: Notify Administrator of new buyer enquiry
       const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || INITIAL_ADMIN_EMAIL).toLowerCase().trim();
       const adminUser = await DataAccess.findUserByEmail(adminEmail);
-      const targetProperty = await DataAccess.getPropertyById(propertyId);
       const propTitle = targetProperty?.title || "Property Listing";
 
       if (adminUser) {

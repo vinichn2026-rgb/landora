@@ -5,6 +5,9 @@ import PostPropertyClient from "@/components/seller/PostPropertyClient";
 export const metadata = {
   title: "Sell or Rent Your Property FREE | Landora",
   description: "List your plot, land parcel, house, or commercial property on Landora with 0% brokerage. Direct genuine buyer inquiries across Tamil Nadu.",
+  alternates: {
+    canonical: "/post-property",
+  },
 };
 
 export default function PostPropertyPage() {

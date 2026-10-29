@@ -268,7 +268,7 @@ export interface SearchFilters {
   furnishing?: FurnishingStatus | "all";
   sellerType?: "OWNER" | "AGENT" | "BUILDER" | "all" | string;
   verifiedOnly?: boolean;
-  sortBy?: "recommended" | "newest" | "price_asc" | "price_desc" | "area_desc";
+  sortBy?: "recommended" | "newest" | "price_asc" | "price_desc" | "area_desc" | "price-asc" | "price-desc" | "area-desc";
   page?: number;
   limit?: number;
 }

@@ -184,11 +184,11 @@ export const PropertyStore = {
     const sortBy = filters?.sortBy || "recommended";
     if (sortBy === "newest") {
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    } else if (sortBy === "price_asc") {
+    } else if (sortBy === "price_asc" || sortBy === "price-asc") {
       list.sort((a, b) => a.price - b.price);
-    } else if (sortBy === "price_desc") {
+    } else if (sortBy === "price_desc" || sortBy === "price-desc") {
       list.sort((a, b) => b.price - a.price);
-    } else if (sortBy === "area_desc") {
+    } else if (sortBy === "area_desc" || sortBy === "area-desc") {
       list.sort((a, b) => normalizeAreaToSqft(b.area, b.areaUnit) - normalizeAreaToSqft(a.area, a.areaUnit));
     } else {
       // Recommended: Plots first (#1 priority), then Featured, then verified, then newest
